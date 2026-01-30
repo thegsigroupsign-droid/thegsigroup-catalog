@@ -27,7 +27,7 @@ const VERCEL_FIREBASE_CONFIG = {
 // --- CONFIGURAÇÕES PADRÃO ---
 const DEFAULT_SETTINGS = {
   companyName: "The GSI Group",
-  tagline: "Signs & Visual Communication",
+  tagline: "Print & Signs Digital Marketing",
   primaryColor: "#F36F21",
   whatsapp: "14074885194",
   email: "designer@thegsigroup.com",
@@ -39,7 +39,7 @@ const DEFAULT_SETTINGS = {
 const ADMIN_PASSWORD = "GSI_FLORIDA_2026"; 
 
 const CATEGORIES = [
-  "All", "Digital marketing", "Graphic Design", "Car wrap", 
+  "All", "Digital Marketing", "Graphic Design", "Car Wrap", 
   "Custom TDF awards", "Illuminated Signs", "Outdoor Signs", 
   "Promotional Signs", "Window Graphics", "Wall Graphics"
 ];
@@ -594,7 +594,7 @@ export default function App() {
         </div>
 
         <p className="text-slate-600 text-[8px] sm:text-[10px] uppercase tracking-[0.3em] font-bold">
-          © {new Date().getFullYear()} {siteSettings.copyright} • ALL RIGHTS RESERVED • FLORIDA • USA
+          © {new Date().getFullYear()} {siteSettings.copyright} • All Rights Reserved • Orlando • USA
         </p>
       </footer>
     </div>
