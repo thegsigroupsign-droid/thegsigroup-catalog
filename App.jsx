@@ -4,13 +4,13 @@ import {
   Info, Package, Star, Zap, Plus, Trash2, Settings, Image as ImageIcon,
   ExternalLink, PenTool, Layers, Printer, Truck, Maximize,
   LayoutDashboard, PlusCircle, Lock, ShieldCheck, AlertCircle, CheckCircle2,
-  ArrowUpDown, Share2, BarChart3, TrendingUp, ChevronDown
+  ArrowUpDown, Share2, BarChart3, TrendingUp, ChevronDown, MapPin, Mail, Phone, Globe
 } from 'lucide-react';
 
 // Importações do Firebase
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, doc, onSnapshot, addDoc, deleteDoc, query } from 'firebase/firestore';
+import { getFirestore, collection, doc, onSnapshot, addDoc, deleteDoc, setDoc, getDoc } from 'firebase/firestore';
 
 // --- ✅ CONFIGURAÇÃO VERCEL ---
 const VERCEL_FIREBASE_CONFIG = {
@@ -23,19 +23,19 @@ const VERCEL_FIREBASE_CONFIG = {
   measurementId: "G-FHDQQKEE7E"
 };
 
-// --- 🎨 CONFIGURAÇÕES DA SUA MARCA (Mude aqui!) ---
-const COMPANY_NAME = "The GSI Group";
-const COMPANY_TAGLINE = "Signs & Visual Communication";
-const PRIMARY_COLOR = "#F36F21"; 
-const WHATSAPP_NUMBER = "14074885194"; 
+// --- CONFIGURAÇÕES PADRÃO (Serão sobrescritas pelo Firebase se existirem) ---
+const DEFAULT_SETTINGS = {
+  companyName: "The GSI Group",
+  tagline: "Signs & Visual Communication",
+  primaryColor: "#F36F21",
+  whatsapp: "14074885194",
+  email: "designer@thegsigroup.com",
+  address: "3344 S. Orange Blossom TRL, Kissimmee, FL 34746",
+  logoUrl: "",
+  copyright: "The GSI Group LLC"
+};
+
 const ADMIN_PASSWORD = "GSI_FLORIDA_2026"; 
-
-// Cole aqui o link do seu logo (ex: do PostImages ou seu site)
-const LOGO_URL = ""; // Se deixar vazio, o site mostrará o nome em texto
-
-// Informações para o Rodapé
-const COMPANY_ADDRESS = "Orlando, Florida, USA";
-const COPYRIGHT_OWNER = "The GSI Group LLC";
 
 const CATEGORIES = [
   "All", "Digital marketing", "Graphic Design", "Car wrap", 
@@ -60,6 +60,7 @@ try {
 export default function App() {
   const [user, setUser] = useState(null);
   const [products, setProducts] = useState([]);
+  const [siteSettings, setSiteSettings] = useState(DEFAULT_SETTINGS);
   const [filter, setFilter] = useState("All");
   const [sortBy, setSortBy] = useState("newest");
   const [searchTerm, setSearchTerm] = useState("");
@@ -71,8 +72,13 @@ export default function App() {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState(false);
+  
+  // Estados de Edição de Configurações
+  const [editSettings, setEditSettings] = useState(DEFAULT_SETTINGS);
   const [newProduct, setNewProduct] = useState({ name: '', category: 'Digital marketing', price: '', description: '', image: '' });
-  const [aiMessages, setAiMessages] = useState([{ role: 'assistant', text: `Hi! Welcome to ${COMPANY_NAME}. How can I assist you with your project?` }]);
+  
+  // AI Chat State
+  const [aiMessages, setAiMessages] = useState([]);
   const [userInput, setUserInput] = useState("");
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [isMobileCategoryMenuOpen, setIsMobileCategoryMenuOpen] = useState(false);
@@ -84,21 +90,46 @@ export default function App() {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else { await signInAnonymously(auth); }
-      } catch (err) { console.log("Login sequence..."); }
+      } catch (err) { console.log("Login..."); }
     };
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, setUser);
     return () => unsubscribe();
   }, []);
 
+  // Sync Settings and Products
   useEffect(() => {
     if (!db || !user) return;
+    
+    // Sync Products
     const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
-    const unsubscribe = onSnapshot(productsRef, (snapshot) => {
+    const unsubProducts = onSnapshot(productsRef, (snapshot) => {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, () => setStatusMsg({ type: 'error', text: 'Cloud connection error.' }));
-    return () => unsubscribe();
+    });
+
+    // Sync Settings
+    const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global');
+    const unsubSettings = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setSiteSettings(data);
+        setEditSettings(data);
+      }
+    });
+
+    return () => { unsubProducts(); unsubSettings(); };
   }, [user]);
+
+  // Chat Initial Sequence
+  useEffect(() => {
+    if (isAiChatOpen && aiMessages.length === 0) {
+      setAiMessages([{
+        role: 'assistant',
+        text: `Welcome to ${siteSettings.companyName}! 🇺🇸\nHow can we help you grow your brand today?`,
+        isInitial: true
+      }]);
+    }
+  }, [isAiChatOpen, siteSettings.companyName]);
 
   const filteredProducts = useMemo(() => {
     let result = products.filter(p => {
@@ -117,7 +148,6 @@ export default function App() {
   const stats = useMemo(() => ({
     total: products.length,
     avgPrice: products.length ? Math.round(products.reduce((acc, p) => acc + Number(p.price), 0) / products.length) : 0,
-    latest: products.length ? products.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0].name : "None"
   }), [products]);
 
   const handlePasswordSubmit = (e) => {
@@ -131,20 +161,26 @@ export default function App() {
     e.preventDefault();
     if (!db || isSaving) return;
     setIsSaving(true);
-    setStatusMsg({ type: 'info', text: 'Syncing to Cloud...' });
     try {
       const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
-      await addDoc(productsRef, { 
-        ...newProduct, 
-        price: Number(newProduct.price), 
-        createdAt: new Date().toISOString() 
-      });
-      setStatusMsg({ type: 'success', text: 'Work added to live catalog!' });
+      await addDoc(productsRef, { ...newProduct, price: Number(newProduct.price), createdAt: new Date().toISOString() });
+      setStatusMsg({ type: 'success', text: 'Work added to catalog!' });
       setNewProduct({ ...newProduct, name: '', price: '', description: '', image: '' });
       setTimeout(() => setStatusMsg({ type: '', text: '' }), 4000);
-    } catch (err) { 
-      setStatusMsg({ type: 'error', text: 'Save failed.' }); 
-    } 
+    } catch (err) { setStatusMsg({ type: 'error', text: 'Save failed.' }); } 
+    finally { setIsSaving(false); }
+  };
+
+  const handleSaveSettings = async (e) => {
+    e.preventDefault();
+    if (!db || isSaving) return;
+    setIsSaving(true);
+    try {
+      const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global');
+      await setDoc(settingsRef, editSettings);
+      setStatusMsg({ type: 'success', text: 'Site settings updated!' });
+      setTimeout(() => setStatusMsg({ type: '', text: '' }), 4000);
+    } catch (err) { setStatusMsg({ type: 'error', text: 'Update failed.' }); }
     finally { setIsSaving(false); }
   };
 
@@ -155,14 +191,37 @@ export default function App() {
     }
   };
 
-  const handleShare = (product) => {
-    if (navigator.share) {
-      navigator.share({
-        title: product.name,
-        text: `Check out this work from ${COMPANY_NAME}: ${product.name}`,
-        url: window.location.href,
-      }).catch(() => {});
+  // Robot Chat Interactivity
+  const handleChatOption = async (option) => {
+    const userMsg = { role: 'user', text: option };
+    setAiMessages(prev => [...prev, userMsg]);
+    
+    let botResponse = "";
+    
+    switch(option) {
+      case "Get a Quote":
+        botResponse = `Great! Please send us details about your project on WhatsApp. I'm redirecting you...`;
+        setTimeout(() => window.open(`https://wa.me/${siteSettings.whatsapp}?text=Hi! I would like a quote for a new project.`, '_blank'), 1500);
+        break;
+      case "Track My Order":
+        botResponse = `To track your current order, please provide your Order ID to our team on WhatsApp or via email: ${siteSettings.email}`;
+        break;
+      case "I'm already a customer":
+        botResponse = `Welcome back! Our support team is ready to help you on WhatsApp.`;
+        setTimeout(() => window.open(`https://wa.me/${siteSettings.whatsapp}?text=Hi! I am an existing customer and need assistance.`, '_blank'), 1500);
+        break;
+      case "Our Address":
+        botResponse = `We are located at:\n📍 ${siteSettings.address}\n\nWould you like to open Google Maps?`;
+        break;
+      case "Talk to an Agent":
+        botResponse = `Connecting you to a human agent...`;
+        setTimeout(() => window.open(`https://wa.me/${siteSettings.whatsapp}`, '_blank'), 1000);
+        break;
+      default:
+        botResponse = "How can I help you with our services?";
     }
+
+    setAiMessages(prev => [...prev, { role: 'assistant', text: botResponse }]);
   };
 
   const handleSendMessage = async () => {
@@ -172,7 +231,7 @@ export default function App() {
     setUserInput("");
     setIsLoadingAi(true);
     const apiKey = ""; 
-    const systemPrompt = `Expert project consultant for ${COMPANY_NAME} in Florida. Categories: ${CATEGORIES.join(", ")}. Speak English, Portuguese, and Spanish.`;
+    const systemPrompt = `Expert project consultant for ${siteSettings.companyName} in Florida. Address: ${siteSettings.address}. Email: ${siteSettings.email}. WhatsApp: ${siteSettings.whatsapp}. Speak English, Portuguese, and Spanish.`;
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
@@ -180,78 +239,110 @@ export default function App() {
         body: JSON.stringify({ contents: [{ parts: [{ text: userInput }] }], systemInstruction: { parts: [{ text: systemPrompt }] } })
       });
       const data = await response.json();
-      setAiMessages(prev => [...prev, { role: 'assistant', text: data?.candidates?.[0]?.content?.parts?.[0]?.text || "How can I help you today?" }]);
+      setAiMessages(prev => [...prev, { role: 'assistant', text: data?.candidates?.[0]?.content?.parts?.[0]?.text || "I'm here to help!" }]);
     } catch (e) { setAiMessages(prev => [...prev, { role: 'assistant', text: "Chat busy. Please call us." }]); } 
     finally { setIsLoadingAi(false); }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-orange-100 overflow-x-hidden">
-      {/* HEADER REFINADO COM LOGO */}
+      {/* HEADER */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 h-20 flex justify-between items-center px-4 sm:px-8 shadow-sm transition-all">
-        <div className="flex flex-col cursor-pointer hover:opacity-80 transition-opacity" onClick={() => {setFilter("All"); window.scrollTo({top: 0, behavior: 'smooth'});}}>
-          {LOGO_URL ? (
-            <img src={LOGO_URL} alt={COMPANY_NAME} className="h-10 sm:h-12 w-auto object-contain" />
+        <div className="flex flex-col cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setFilter("All")}>
+          {siteSettings.logoUrl ? (
+            <img src={siteSettings.logoUrl} alt={siteSettings.companyName} className="h-10 sm:h-12 w-auto object-contain" />
           ) : (
             <>
-              <h1 className="text-lg sm:text-2xl font-black italic tracking-tighter leading-none uppercase">THE <span style={{ color: PRIMARY_COLOR }}>GSI</span> GROUP</h1>
-              <span className="text-[7px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">{COMPANY_TAGLINE}</span>
+              <h1 className="text-lg sm:text-2xl font-black italic tracking-tighter leading-none uppercase">THE <span style={{ color: siteSettings.primaryColor }}>GSI</span> GROUP</h1>
+              <span className="text-[7px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">{siteSettings.tagline}</span>
             </>
           )}
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
-          <button onClick={() => isAdminMode ? setIsAdminMode(false) : setIsPasswordModalOpen(true)} className={`p-2 sm:p-2.5 rounded-2xl transition-all ${isAdminMode ? 'bg-orange-500 text-white shadow-lg ring-4 ring-orange-100' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}>
+          <button onClick={() => isAdminMode ? setIsAdminMode(false) : setIsPasswordModalOpen(true)} className={`p-2.5 rounded-2xl transition-all ${isAdminMode ? 'bg-orange-500 text-white shadow-lg ring-4 ring-orange-100' : 'text-slate-400 hover:bg-slate-100'}`}>
             <LayoutDashboard className="w-5 h-5" />
           </button>
-          <button onClick={() => window.open(`https://wa.me/1${WHATSAPP_NUMBER}`, '_blank')} className="bg-slate-900 text-white px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-[10px] sm:text-sm font-bold shadow-xl hover:bg-black hover:scale-105 active:scale-95 transition-all uppercase tracking-widest">
+          <button onClick={() => window.open(`https://wa.me/${siteSettings.whatsapp}`, '_blank')} className="bg-slate-900 text-white px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-[10px] sm:text-sm font-bold shadow-xl hover:bg-black hover:scale-105 transition-all uppercase tracking-widest">
             Contact
           </button>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
-        {/* DASHBOARD ADMINISTRATIVO */}
+        {/* DASHBOARD ADMINISTRATIVO COMPLETO */}
         {isAdminMode && (
-          <div className="mb-12 space-y-6 animate-in slide-in-from-top-6 duration-700">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-4">
+          <div className="mb-12 space-y-6 animate-in slide-in-from-top-6 duration-700 text-left">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-4">
                 <div className="bg-orange-50 p-3 rounded-2xl text-orange-600"><BarChart3 className="w-6 h-6"/></div>
                 <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Items</p><p className="text-2xl font-black">{stats.total}</p></div>
               </div>
-              <div className="bg-white p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-4">
+              <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-4">
                 <div className="bg-green-50 p-3 rounded-2xl text-green-600"><TrendingUp className="w-6 h-6"/></div>
-                <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Avg. Project</p><p className="text-2xl font-black">${stats.avgPrice}</p></div>
-              </div>
-              <div className="bg-white p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-4">
-                <div className="bg-blue-50 p-3 rounded-2xl text-blue-600"><Zap className="w-6 h-6"/></div>
-                <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Latest Add</p><p className="text-sm font-bold truncate max-w-[120px]">{stats.latest}</p></div>
+                <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Avg. Price</p><p className="text-2xl font-black">${stats.avgPrice}</p></div>
               </div>
             </div>
 
-            <div className="bg-white border-2 border-orange-100 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 shadow-2xl relative text-left">
-              <div className="flex justify-between items-center mb-8">
-                <h2 className="text-lg sm:text-xl font-black italic uppercase tracking-tighter text-orange-600 flex items-center gap-2"><PlusCircle className="w-5 h-5" /> Publish New Work</h2>
-                <button onClick={() => setIsAdminMode(false)} className="text-slate-400 hover:text-red-500 font-bold text-[10px] uppercase tracking-widest transition-colors">Close Panel</button>
-              </div>
-              
-              {statusMsg.text && (
-                <div className={`mb-6 p-4 rounded-xl flex items-center gap-3 font-bold text-xs animate-bounce ${statusMsg.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                  <AlertCircle className="w-4 h-4" />{statusMsg.text}
+            {/* Configurações Globais do Site */}
+            <div className="bg-slate-900 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-white shadow-2xl relative">
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-orange-500 uppercase italic tracking-tighter"><Settings className="w-5 h-5" /> Global Site Settings</h2>
+              <form onSubmit={handleSaveSettings} className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-1">
+                  <p className="text-[9px] font-bold text-slate-500 uppercase ml-2">Logo Direct Link (.png/jpg)</p>
+                  <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-white outline-none focus:border-orange-500" value={editSettings.logoUrl} onChange={e => setEditSettings({...editSettings, logoUrl: e.target.value})} placeholder="Paste logo URL here" />
                 </div>
-              )}
+                <div className="space-y-1">
+                  <p className="text-[9px] font-bold text-slate-500 uppercase ml-2">Business Address</p>
+                  <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-white outline-none" value={editSettings.address} onChange={e => setEditSettings({...editSettings, address: e.target.value})} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[9px] font-bold text-slate-500 uppercase ml-2">Business Email</p>
+                  <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-white outline-none" value={editSettings.email} onChange={e => setEditSettings({...editSettings, email: e.target.value})} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[9px] font-bold text-slate-500 uppercase ml-2">Business Phone (WhatsApp)</p>
+                  <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-white outline-none" value={editSettings.whatsapp} onChange={e => setEditSettings({...editSettings, whatsapp: e.target.value})} />
+                </div>
+                <div className="md:col-span-2 space-y-1">
+                  <p className="text-[9px] font-bold text-slate-500 uppercase ml-2">Copyright Text</p>
+                  <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-white outline-none" value={editSettings.copyright} onChange={e => setEditSettings({...editSettings, copyright: e.target.value})} />
+                </div>
+                <button type="submit" className="md:col-span-2 bg-orange-600 p-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-orange-500 transition-all">Save Global Changes</button>
+              </form>
+            </div>
 
+            {/* Adicionar Trabalho */}
+            <div className="bg-white border-2 border-orange-100 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 shadow-2xl relative">
+              <h2 className="text-lg sm:text-xl font-black italic uppercase tracking-tighter text-orange-600 mb-8 flex items-center gap-2"><PlusCircle className="w-5 h-5" /> Publish New Work</h2>
               <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 <input placeholder="Project Title" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
                 <select className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none cursor-pointer" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
                   {CATEGORIES.filter(c => c !== "All").map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <input placeholder="Starting Price ($)" type="number" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
-                <input placeholder="Direct Image Link" className="md:col-span-3 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={newProduct.image} onChange={e => setNewProduct({...newProduct, image: e.target.value})} required />
+                <input placeholder="Image Link" className="md:col-span-3 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={newProduct.image} onChange={e => setNewProduct({...newProduct, image: e.target.value})} required />
                 <textarea placeholder="Description..." className="md:col-span-3 p-4 bg-slate-50 border border-slate-100 rounded-2xl h-24 text-sm outline-none" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
-                <button type="submit" disabled={isSaving} className="md:col-span-3 bg-orange-600 text-white font-black py-4 sm:py-5 rounded-[1.2rem] shadow-xl uppercase active:scale-95 transition-all text-xs tracking-widest disabled:opacity-50">
-                  {isSaving ? "Publishing..." : "Add to Catalog Now"}
-                </button>
+                <button type="submit" disabled={isSaving} className="md:col-span-3 bg-slate-900 text-white font-black py-4 rounded-[1.5rem] shadow-xl uppercase active:scale-95 transition-all text-xs tracking-widest">{isSaving ? "Syncing..." : "Add to Live Catalog"}</button>
               </form>
+            </div>
+            
+            <div className="bg-white rounded-[2rem] p-6 text-slate-900 border border-slate-200 overflow-hidden text-left">
+              <h3 className="text-lg font-bold mb-6 italic uppercase flex items-center gap-2 text-slate-400"><Layers className="w-5 h-5"/> Live Inventory Control</h3>
+              <div className="max-h-[300px] overflow-y-auto no-scrollbar">
+                <table className="w-full text-xs sm:text-sm">
+                  <tbody className="divide-y divide-slate-100">
+                    {products.map(p => (
+                      <tr key={p.id} className="group hover:bg-slate-50">
+                        <td className="py-4 px-2 font-bold">{p.name}</td>
+                        <td className="py-4 px-2 text-[10px] text-slate-400 uppercase hidden sm:table-cell">{p.category}</td>
+                        <td className="py-4 px-2 text-right">
+                          <button onClick={() => handleDeleteProduct(p.id)} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -266,9 +357,9 @@ export default function App() {
               <h2 className="text-3xl sm:text-7xl font-black mb-4 sm:mb-6 uppercase tracking-tighter leading-[0.9] text-white">
                 Make Your <br/><span className="text-neutral-900 underline decoration-white/30 underline-offset-4 sm:underline-offset-8">Brand Glow.</span>
               </h2>
-              <p className="text-orange-50 mb-6 sm:mb-10 text-sm sm:text-xl font-medium opacity-90 leading-relaxed max-w-md">Precision vehicle wraps and visual solutions for high-end businesses.</p>
-              <button onClick={() => setIsAiChatOpen(true)} className="w-full sm:w-auto bg-neutral-900 text-white px-6 sm:px-10 py-4 sm:py-5 rounded-xl sm:rounded-[2rem] font-black flex items-center justify-center gap-3 hover:bg-black transition-all shadow-2xl uppercase text-[10px] sm:text-xs tracking-widest">
-                <MessageSquare className="w-5 h-5" /> AI Consultant
+              <p className="text-orange-50 mb-6 sm:mb-10 text-sm sm:text-xl font-medium opacity-90 leading-relaxed max-w-md">The most advanced vehicle wraps and visual signage in Florida.</p>
+              <button onClick={() => setIsAiChatOpen(true)} className="w-full sm:w-auto bg-neutral-900 text-white px-6 sm:px-10 py-4 sm:py-5 rounded-xl sm:rounded-[2rem] font-black flex items-center justify-center gap-3 hover:bg-black hover:scale-105 active:scale-95 transition-all shadow-2xl uppercase text-[10px] sm:text-xs tracking-widest">
+                <MessageSquare className="w-5 h-5" /> Start Project Consultation
               </button>
             </div>
             <PenTool className="w-48 h-48 sm:w-[500px] sm:h-[500px] text-white/5 absolute -right-10 -bottom-10 rotate-12 transition-transform duration-1000" />
@@ -277,10 +368,10 @@ export default function App() {
 
         {/* CONTROLES MOBILE / DESKTOP */}
         <div className="flex flex-col gap-4 sm:gap-6 mb-8 sm:mb-12">
-          {/* Desktop */}
+          {/* Desktop Categories */}
           <div className="hidden sm:flex flex-wrap justify-center gap-2">
             {CATEGORIES.map(cat => (
-              <button key={cat} onClick={() => setFilter(cat)} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm border ${filter === cat ? "bg-slate-900 text-white border-slate-900 shadow-xl" : "bg-white text-slate-500 border-slate-200 hover:border-orange-500"} flex items-center justify-center`}>
+              <button key={cat} onClick={() => setFilter(cat)} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm border ${filter === cat ? "bg-slate-900 text-white border-slate-900 shadow-xl scale-105" : "bg-white text-slate-500 border-slate-200 hover:border-orange-500"} flex items-center justify-center`}>
                 {cat}
               </button>
             ))}
@@ -302,7 +393,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center justify-between px-2 sm:px-4 border-t border-slate-200 pt-4 sm:pt-6">
-            <div className="flex items-center gap-2 text-slate-400"><Filter className="w-3 h-3 sm:w-4 sm:h-4" /><span className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest">{filteredProducts.length} Works</span></div>
+            <div className="flex items-center gap-2 text-slate-400"><Filter className="w-3 h-3 sm:w-4 sm:h-4" /><span className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest">{filteredProducts.length} Results</span></div>
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-transparent text-[8px] sm:text-[10px] font-black uppercase tracking-widest outline-none cursor-pointer text-slate-600">
               <option value="newest">Newest</option>
               <option value="price-low">Price: Low</option>
@@ -317,7 +408,7 @@ export default function App() {
             <div key={product.id} className="group bg-white rounded-[2rem] sm:rounded-[3rem] border border-slate-100/60 p-3 sm:p-4 hover:shadow-2xl transition-all duration-500 relative flex flex-col shadow-sm">
               <div className="aspect-square rounded-[1.5rem] sm:rounded-[2.2rem] overflow-hidden bg-slate-50 mb-4 sm:mb-6 relative shadow-inner">
                 <img src={product.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" alt={product.name} />
-                <div className="absolute top-3 left-3 sm:top-4 sm:left-4 bg-orange-600 text-white text-[7px] sm:text-[8px] font-black px-2 sm:px-3 py-1.5 rounded-lg uppercase shadow-lg z-10 tracking-wider">GSI FLORIDA</div>
+                <div className="absolute top-3 left-3 sm:top-4 sm:left-4 bg-orange-600 text-white text-[7px] sm:text-[8px] font-black px-2 sm:px-3 py-1.5 rounded-lg uppercase shadow-lg z-10 tracking-wider">FLORIDA ELITE</div>
                 <button onClick={() => handleShare(product)} className="absolute top-3 right-3 sm:top-4 sm:right-4 bg-white/20 hover:bg-white/40 backdrop-blur-md text-white p-2 rounded-xl transition-all opacity-100 sm:opacity-0 group-hover:opacity-100"><Share2 className="w-3 h-3 sm:w-4 sm:h-4" /></button>
               </div>
               <div className="flex-1 px-1 sm:px-2 flex flex-col">
@@ -333,7 +424,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* MODAL ADMIN */}
+      {/* LOGIN ADMIN */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl animate-in fade-in">
           <div className="bg-white rounded-[2rem] sm:rounded-[3rem] p-8 sm:p-10 max-w-sm w-full shadow-2xl text-center space-y-6">
@@ -341,7 +432,7 @@ export default function App() {
             <h2 className="text-xl sm:text-2xl font-black italic uppercase text-slate-900 tracking-tighter">Admin Access</h2>
             <form onSubmit={handlePasswordSubmit} className="space-y-4">
               <input type="password" placeholder="••••••••" className={`w-full p-4 sm:p-5 bg-slate-50 border-2 rounded-2xl text-center text-xl font-bold outline-none ${passwordError ? 'border-red-500 animate-shake' : 'border-slate-100'}`} value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoFocus />
-              <button type="submit" className="w-full p-4 bg-orange-600 text-white rounded-2xl font-black shadow-lg uppercase text-[10px] tracking-widest">Unlock</button>
+              <button type="submit" className="w-full p-4 bg-orange-600 text-white rounded-2xl font-black shadow-lg uppercase text-[10px] tracking-widest">Unlock Panel</button>
             </form>
           </div>
         </div>
@@ -352,7 +443,7 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-6 bg-slate-900/80 backdrop-blur-md overflow-y-auto text-left">
           <div className="bg-white rounded-none sm:rounded-[3.5rem] min-h-screen sm:min-h-0 max-w-5xl w-full flex flex-col md:flex-row overflow-hidden shadow-2xl my-auto animate-in zoom-in duration-500">
             <div className="md:w-1/2 h-[300px] sm:h-[400px] md:h-auto relative bg-slate-100 group shrink-0">
-              <img src={selectedProduct.image} className="w-full h-full object-cover" alt={selectedProduct.name} />
+              <img src={selectedProduct.image} className="w-full h-full object-cover transition-transform duration-[2s] group-hover:scale-105" alt={selectedProduct.name} />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
               <button onClick={() => setSelectedProduct(null)} className="sm:hidden absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full backdrop-blur-md"><X className="w-6 h-6" /></button>
             </div>
@@ -366,7 +457,7 @@ export default function App() {
                 </div>
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-8 pt-6 border-t border-slate-100 mt-auto">
                   <div className="text-center sm:text-left"><span className="text-[9px] sm:text-[10px] text-slate-400 font-black uppercase tracking-widest block mb-1">Starting at</span><span className="text-3xl sm:text-4xl font-black text-slate-900 leading-none">${Number(selectedProduct.price).toLocaleString()}</span></div>
-                  <button onClick={() => window.open(`https://wa.me/1${WHATSAPP_NUMBER}?text=Estimate for ${selectedProduct.name}`)} className="w-full sm:w-auto bg-orange-600 text-white px-8 sm:px-12 py-4 sm:py-5 rounded-xl sm:rounded-[2rem] font-black shadow-xl hover:bg-orange-700 active:scale-95 transition-all flex items-center justify-center gap-3 uppercase text-[10px] sm:text-[11px] tracking-widest">
+                  <button onClick={() => window.open(`https://wa.me/1${siteSettings.whatsapp}?text=Hi! I am interested in an estimate for ${selectedProduct.name}`)} className="w-full sm:w-auto bg-orange-600 text-white px-8 sm:px-12 py-4 sm:py-5 rounded-xl sm:rounded-[2rem] font-black shadow-xl hover:bg-orange-700 active:scale-95 transition-all flex items-center justify-center gap-3 uppercase text-[10px] sm:text-[11px] tracking-widest">
                     Request Quote <ExternalLink className="w-4 h-4" />
                   </button>
                 </div>
@@ -376,25 +467,40 @@ export default function App() {
         </div>
       )}
 
-      {/* AI CHATBOT */}
+      {/* 🤖 ROBOT CHAT INTERATIVO */}
       <div className={`fixed inset-0 sm:inset-auto sm:bottom-8 sm:right-8 z-50 transition-all transform ${isAiChatOpen ? 'scale-100 translate-y-0' : 'scale-0 translate-y-20 pointer-events-none'}`}>
-        <div className="bg-white h-full sm:h-[680px] sm:rounded-[3rem] shadow-2xl w-full sm:w-[420px] flex flex-col border border-slate-100 overflow-hidden text-slate-900 text-left">
+        <div className="bg-white h-full sm:h-[680px] sm:rounded-[3rem] shadow-[0_30px_100px_-20px_rgba(0,0,0,0.3)] w-full sm:w-[420px] flex flex-col border border-slate-100 overflow-hidden text-slate-900 text-left">
           <div className="bg-slate-900 p-6 sm:p-8 text-white flex justify-between items-center relative overflow-hidden shrink-0">
+            <div className="absolute top-0 right-0 w-32 sm:w-40 h-32 sm:h-40 bg-orange-500/20 rounded-full blur-3xl"></div>
             <div className="relative z-10 flex items-center gap-3 sm:gap-4">
               <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl bg-orange-500 flex items-center justify-center shadow-lg"><MessageSquare className="w-5 h-5 sm:w-7 sm:h-7 text-white" /></div>
-              <div className="text-left leading-none"><h4 className="font-black text-sm sm:text-base uppercase tracking-tight text-white mb-1">GSI Assistant</h4><p className="text-[8px] sm:text-[10px] text-orange-400 font-bold uppercase tracking-[0.2em]">Florida Team</p></div>
+              <div className="text-left leading-none"><h4 className="font-black text-sm sm:text-base uppercase tracking-tight text-white mb-1">Consultant</h4><p className="text-[8px] sm:text-[10px] text-orange-400 font-bold uppercase tracking-[0.2em]">The GSI Group</p></div>
             </div>
-            <button onClick={() => setIsAiChatOpen(false)} className="relative z-10 bg-white/10 p-2 sm:p-3 rounded-xl hover:bg-white/20"><X className="w-6 h-6 sm:w-5 sm:h-5" /></button>
+            <button onClick={() => setIsAiChatOpen(false)} className="relative z-10 bg-white/10 p-2 sm:p-3 rounded-xl hover:bg-white/20 transition-all shadow-inner"><X className="w-6 h-6 sm:w-5 sm:h-5" /></button>
           </div>
+          
           <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-4 sm:space-y-6 bg-slate-50/50 no-scrollbar">
             {aiMessages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
-                <div className={`max-w-[90%] sm:max-w-[85%] p-4 sm:p-5 rounded-2xl sm:rounded-[2.2rem] text-xs sm:text-sm leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-orange-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-200/50 text-slate-900'}`}>{msg.text}</div>
+                <div className={`max-w-[90%] sm:max-w-[85%] p-4 sm:p-5 rounded-2xl sm:rounded-[2.2rem] text-xs sm:text-sm leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-orange-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-200/50 text-slate-900'}`}>
+                  {msg.text}
+                  {msg.isInitial && (
+                    <div className="mt-6 grid grid-cols-1 gap-2">
+                      {["Get a Quote", "Track My Order", "I'm already a customer", "New Project Inquiry", "Our Address", "Talk to an Agent"].map(opt => (
+                        <button key={opt} onClick={() => handleChatOption(opt)} className="w-full text-left p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-orange-500 hover:bg-orange-50 transition-all text-[10px] font-bold uppercase tracking-widest text-slate-600 flex items-center justify-between">
+                          {opt} <ChevronRight className="w-3 h-3 text-orange-500" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
+            {isLoadingAi && <div className="text-[8px] sm:text-[9px] font-black text-orange-500 uppercase tracking-widest animate-pulse ml-4">Thinking...</div>}
           </div>
+
           <div className="p-4 sm:p-6 bg-white border-t border-slate-100 flex gap-2 pb-8 sm:pb-6">
-            <input className="flex-1 bg-slate-100 rounded-xl px-4 py-3 sm:py-4 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-orange-500 text-slate-900" placeholder="Ask about wraps, prices..." value={userInput} onChange={e => setUserInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSendMessage()} />
+            <input className="flex-1 bg-slate-100 rounded-xl px-4 py-3 sm:py-4 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-orange-500 text-slate-900" placeholder="Type your message..." value={userInput} onChange={e => setUserInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSendMessage()} />
             <button onClick={handleSendMessage} className="bg-slate-900 text-white p-3 sm:p-4 rounded-xl sm:rounded-2xl shadow-xl hover:bg-orange-600"><Send className="w-4 h-4 sm:w-5 sm:h-5" /></button>
           </div>
         </div>
@@ -406,33 +512,34 @@ export default function App() {
         </button>
       )}
       
-      {/* 🏁 RODAPÉ PERSONALIZADO (Ajuste suas informações aqui!) */}
+      {/* 🏁 RODAPÉ CONFIGURÁVEL PELO DASHBOARD */}
       <footer className="bg-slate-900 text-white py-16 sm:py-24 mt-12 sm:mt-20 text-center border-t border-white/5 px-4 relative overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-px bg-gradient-to-r from-transparent via-orange-500/50 to-transparent"></div>
+        <h2 className="text-xl sm:text-4xl font-black italic uppercase tracking-tighter leading-none mb-4 sm:mb-6">{siteSettings.companyName.split(' ')[0]} <span className="text-orange-500">{siteSettings.companyName.split(' ').slice(1).join(' ')}</span></h2>
+        <p className="text-slate-400 text-[9px] sm:text-[12px] uppercase tracking-[0.4em] mb-8 italic font-medium">{siteSettings.tagline}</p>
         
-        {/* Sua Marca */}
-        <h2 className="text-xl sm:text-4xl font-black italic uppercase tracking-tighter leading-none mb-4 sm:mb-6">THE <span className="text-orange-500">GSI</span> GROUP</h2>
-        
-        {/* Seu Slogan / Descrição */}
-        <p className="text-slate-400 text-[9px] sm:text-[12px] uppercase tracking-[0.4em] mb-8 italic font-medium">Precision Signage & High-Impact Graphics</p>
-        
-        {/* Suas Informações Oficiais */}
         <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-8 mb-12 text-slate-500 text-[9px] sm:text-[11px] font-black uppercase tracking-widest">
-          <div className="flex items-center justify-center gap-2">📍 {COMPANY_ADDRESS}</div>
-          <div className="hidden sm:block">•</div>
-          <div className="flex items-center justify-center gap-2">📞 +1 (407) 488-5194</div>
+          <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(siteSettings.address)}`, '_blank')} className="flex items-center justify-center gap-2 hover:text-white transition-colors">
+            <MapPin className="w-4 h-4 text-orange-500" /> {siteSettings.address}
+          </button>
+          <div className="hidden sm:block opacity-20">•</div>
+          <a href={`mailto:${siteSettings.email}`} className="flex items-center justify-center gap-2 hover:text-white transition-colors">
+            <Mail className="w-4 h-4 text-orange-500" /> {siteSettings.email}
+          </a>
+          <div className="hidden sm:block opacity-20">•</div>
+          <a href={`https://wa.me/${siteSettings.whatsapp}`} className="flex items-center justify-center gap-2 hover:text-white transition-colors">
+            <Phone className="w-4 h-4 text-orange-500" /> +1 ({siteSettings.whatsapp.substring(1,4)}) {siteSettings.whatsapp.substring(4,7)}-{siteSettings.whatsapp.substring(7)}
+          </a>
         </div>
 
-        {/* Linha Decorativa */}
-        <div className="flex justify-center gap-3 sm:gap-4 mb-8">
-          <div className="w-12 h-1 bg-white/5 rounded-full"></div>
+        <div className="flex justify-center gap-3 sm:gap-4 mb-8 opacity-20">
+          <div className="w-12 h-1 bg-white rounded-full"></div>
           <div className="w-4 h-1 bg-orange-500 rounded-full"></div>
-          <div className="w-12 h-1 bg-white/5 rounded-full"></div>
+          <div className="w-12 h-1 bg-white rounded-full"></div>
         </div>
 
-        {/* Copyrights (Direitos de Autor) */}
         <p className="text-slate-600 text-[8px] sm:text-[10px] uppercase tracking-[0.3em] font-bold">
-          © {new Date().getFullYear()} {COPYRIGHT_OWNER} • ALL RIGHTS RESERVED • FLORIDA • USA
+          © {new Date().getFullYear()} {siteSettings.copyright} • ALL RIGHTS RESERVED • FLORIDA • USA
         </p>
       </footer>
     </div>
