@@ -3,7 +3,7 @@ import {
   Search, ShoppingCart, ChevronRight, Filter, MessageSquare, X, Send,
   Info, Package, Star, Zap, Plus, Trash2, Settings, Image as ImageIcon,
   ExternalLink, PenTool, Layers, Printer, Truck, Maximize,
-  LayoutDashboard, PlusCircle, Lock, ShieldCheck
+  LayoutDashboard, PlusCircle, Lock, ShieldCheck, AlertCircle, CheckCircle2
 } from 'lucide-react';
 
 // Firebase Imports
@@ -11,14 +11,14 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, doc, onSnapshot, addDoc, deleteDoc, query } from 'firebase/firestore';
 
-// --- THE GSI GROUP BRANDING & CONFIG ---
+// --- CONFIGURAÇÕES DA MARCA THE GSI GROUP ---
 const COMPANY_NAME = "The GSI Group";
 const COMPANY_TAGLINE = "Signs & Visual Communication";
 const PRIMARY_COLOR = "#F36F21"; 
-const WHATSAPP_NUMBER = "14074885194"; // Official US number
+const WHATSAPP_NUMBER = "14074885194"; // Número oficial US
 const ADMIN_PASSWORD = "GSI_FLORIDA_2026"; 
 
-// Official categories list
+// Lista de categorias oficiais
 const CATEGORIES = [
   "All", 
   "Digital marketing", 
@@ -32,12 +32,13 @@ const CATEGORIES = [
   "Wall Graphics"
 ];
 
-// --- FIREBASE INITIALIZATION WITH FAIL-SAFE (Prevents White Screen) ---
+// --- INICIALIZAÇÃO SEGURA DO FIREBASE ---
 let db = null;
 let auth = null;
 let appId = typeof __app_id !== 'undefined' ? __app_id : 'the-gsi-group-final';
 
 try {
+  // Verificação ultra-segura para evitar ecrã branco no Vercel/Ambientes Externos
   if (typeof __firebase_config !== 'undefined' && __firebase_config) {
     const firebaseConfig = JSON.parse(__firebase_config);
     const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
@@ -45,7 +46,7 @@ try {
     db = getFirestore(app);
   }
 } catch (e) {
-  console.warn("Firebase config not detected. App running in demo mode.");
+  console.warn("Base de dados não detetada. O modo de demonstração foi ativado.");
 }
 
 export default function App() {
@@ -57,13 +58,16 @@ export default function App() {
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  // Admin & Security States
+  // Estado para mensagens de feedback no Dashboard
+  const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
+  
+  // Estados de Admin e Segurança
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState(false);
   
-  // Form State
+  // Estado do Formulário
   const [newProduct, setNewProduct] = useState({ 
     name: '', 
     category: 'Digital marketing', 
@@ -72,7 +76,7 @@ export default function App() {
     image: '' 
   });
   
-  // AI Chat State
+  // Estado do Chat IA
   const [aiMessages, setAiMessages] = useState([{ 
     role: 'assistant', 
     text: `Hello! Welcome to ${COMPANY_NAME}. I'm your project consultant. How can I help you?` 
@@ -80,7 +84,7 @@ export default function App() {
   const [userInput, setUserInput] = useState("");
   const [isLoadingAi, setIsLoadingAi] = useState(false);
 
-  // Regra 3: Autenticação obrigatória antes de qualquer consulta
+  // Autenticação (Regra 3)
   useEffect(() => {
     if (!auth) return;
     const initAuth = async () => {
@@ -91,7 +95,7 @@ export default function App() {
           await signInAnonymously(auth);
         }
       } catch (err) { 
-        console.error("Authentication error:", err); 
+        console.error("Erro de autenticação:", err); 
       }
     };
     initAuth();
@@ -99,7 +103,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Regra 1: Sincronização em tempo real (Paths estritos)
+  // Sincronização em tempo real (Regra 1)
   useEffect(() => {
     if (!db || !user) return;
     const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
@@ -107,12 +111,12 @@ export default function App() {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setProducts(docs);
     }, (error) => {
-      console.error("Firestore sync error:", error);
+      console.error("Erro Firestore:", error);
     });
     return () => unsubscribe();
   }, [user]);
 
-  // Regra 2: Filtragem em memória (Javascript)
+  // Filtragem (Regra 2)
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
       const matchesCategory = filter === "All" || p.category === filter;
@@ -143,26 +147,46 @@ export default function App() {
     }
   };
 
-  // Funções de Gestão (CRUD) - Corrigidas para salvamento efetivo
+  // --- FUNÇÃO DE SALVAMENTO CORRIGIDA ---
   const handleAddProduct = async (e) => {
     e.preventDefault();
-    if (!db || !user || !isAdminMode || isSaving) return;
+    
+    if (!db) {
+      setStatusMsg({ type: 'error', text: 'Error: Database not connected. Please check setup.' });
+      return;
+    }
+    
+    if (!user || !isAdminMode || isSaving) return;
     
     setIsSaving(true);
+    setStatusMsg({ type: 'info', text: 'Publishing to catalog...' });
+
     try {
       const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
+      
+      // Validação básica dos dados
+      const priceValue = Number(newProduct.price);
+      if (isNaN(priceValue)) throw new Error("Preço inválido.");
+
       await addDoc(productsRef, { 
         name: newProduct.name,
         category: newProduct.category,
-        price: Number(newProduct.price),
+        price: priceValue,
         description: newProduct.description,
         image: newProduct.image,
         createdAt: new Date().toISOString()
       });
-      // Clear form on success
+
+      setStatusMsg({ type: 'success', text: 'Work published successfully!' });
+      // Limpa apenas os campos de texto, mantém a categoria para o próximo upload
       setNewProduct({ ...newProduct, name: '', price: '', description: '', image: '' });
+      
+      // Limpa a mensagem de sucesso após 3 segundos
+      setTimeout(() => setStatusMsg({ type: '', text: '' }), 3000);
+
     } catch (err) { 
-      console.error("Error saving product:", err); 
+      console.error("Erro ao salvar:", err); 
+      setStatusMsg({ type: 'error', text: 'Failed to save. Try again.' });
     } finally {
       setIsSaving(false);
     }
@@ -173,11 +197,11 @@ export default function App() {
     try {
       await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
     } catch (err) { 
-      console.error("Error deleting product:", err); 
+      console.error("Erro ao apagar:", err); 
     }
   };
 
-  // Integração Gemini IA
+  // Chat IA
   const handleSendMessage = async () => {
     if (!userInput.trim() || isLoadingAi) return;
     const userMsg = { role: 'user', text: userInput };
@@ -186,7 +210,7 @@ export default function App() {
     setIsLoadingAi(true);
 
     const apiKey = ""; 
-    const systemPrompt = `You are a professional consultant for ${COMPANY_NAME} in Florida. We specialize in vehicle wraps, signage, and visual marketing. Speak English, Portuguese, or Spanish. Services: ${CATEGORIES.join(", ")}.`;
+    const systemPrompt = `You are a consultant for ${COMPANY_NAME} in Florida. Speak English, Portuguese, or Spanish. Services: ${CATEGORIES.join(", ")}.`;
 
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
@@ -198,10 +222,10 @@ export default function App() {
         })
       });
       const data = await response.json();
-      const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "I'm here to assist with your brand visibility!";
+      const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "I'm here to help!";
       setAiMessages(prev => [...prev, { role: 'assistant', text: aiText }]);
     } catch (error) {
-      setAiMessages(prev => [...prev, { role: 'assistant', text: "Service temporarily offline. Please try again later." }]);
+      setAiMessages(prev => [...prev, { role: 'assistant', text: "Service temporarily offline." }]);
     } finally { 
       setIsLoadingAi(false); 
     }
@@ -213,7 +237,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-orange-100">
-      {/* Fixed Header */}
+      {/* Header */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 h-20 flex justify-between items-center px-4 sm:px-8 shadow-sm">
         <div className="flex flex-col cursor-pointer" onClick={() => setFilter("All")}>
           <h1 className="text-xl sm:text-2xl font-black italic tracking-tighter leading-none uppercase">
@@ -241,17 +265,29 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto px-4 py-8 sm:py-12">
         
-        {/* ADMIN PANEL */}
+        {/* PAINEL ADMINISTRATIVO */}
         {isAdminMode && (
           <div className="mb-16 space-y-8 animate-in slide-in-from-top-4 duration-500 text-left">
-            <div className="bg-white border-2 border-orange-100 rounded-[2.5rem] p-6 sm:p-10 shadow-2xl">
+            <div className="bg-white border-2 border-orange-100 rounded-[2.5rem] p-6 sm:p-10 shadow-2xl relative">
               <div className="flex justify-between items-center mb-8">
                 <div className="flex items-center gap-3 text-orange-600 font-bold">
                   <PlusCircle className="w-6 h-6" />
-                  <h2 className="text-2xl italic uppercase tracking-tighter">Publish Work</h2>
+                  <h2 className="text-2xl italic uppercase tracking-tighter text-slate-900">Publish Work</h2>
                 </div>
-                <button onClick={() => setIsAdminMode(false)} className="text-slate-400 font-bold text-xs uppercase bg-slate-100 px-4 py-2 rounded-xl hover:bg-slate-200 transition-colors">Exit Admin</button>
+                <button onClick={() => setIsAdminMode(false)} className="text-slate-400 font-bold text-xs uppercase bg-slate-100 px-4 py-2 rounded-xl">Exit Admin</button>
               </div>
+
+              {/* MENSAGENS DE ESTADO */}
+              {statusMsg.text && (
+                <div className={`mb-6 p-4 rounded-2xl flex items-center gap-3 font-bold text-sm animate-in fade-in zoom-in duration-300 ${
+                  statusMsg.type === 'error' ? 'bg-red-50 text-red-600' : 
+                  statusMsg.type === 'success' ? 'bg-green-50 text-green-600' : 
+                  'bg-blue-50 text-blue-600'
+                }`}>
+                  {statusMsg.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                  {statusMsg.text}
+                </div>
+              )}
               
               <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-1">
@@ -274,14 +310,14 @@ export default function App() {
                 </div>
                 <div className="md:col-span-3 space-y-1">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Work Description</label>
-                  <textarea placeholder="Detail materials, quality, turnaround time..." className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 h-24 text-sm" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
+                  <textarea placeholder="Detail materials, turnaround time, etc..." className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 h-24 text-sm" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
                 </div>
                 <button 
                   type="submit" 
                   disabled={isSaving}
-                  className="md:col-span-3 bg-orange-600 text-white font-black py-5 rounded-[2rem] shadow-xl uppercase active:scale-95 transition-all text-sm tracking-widest disabled:opacity-50"
+                  className="md:col-span-3 bg-orange-600 text-white font-black py-5 rounded-[2rem] shadow-xl uppercase active:scale-95 transition-all text-sm tracking-widest disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {isSaving ? "Saving..." : "Publish to Catalog Now"}
+                  {isSaving ? "Saving to Catalog..." : "Publish to Catalog Now"}
                 </button>
               </form>
             </div>
@@ -292,7 +328,7 @@ export default function App() {
                 <table className="w-full text-left">
                   <tbody className="divide-y divide-white/5">
                     {products.map(p => (
-                      <tr key={p.id} className="group hover:bg-white/5 transition-colors">
+                      <tr key={p.id} className="group hover:bg-white/5">
                         <td className="py-4 px-2 font-bold text-sm">{p.name}</td>
                         <td className="py-4 px-2 text-[10px] text-slate-400 uppercase tracking-widest">{p.category}</td>
                         <td className="py-4 px-2 text-right">
@@ -318,32 +354,32 @@ export default function App() {
               </h2>
               <p className="text-orange-50 mb-8 text-base sm:text-lg font-medium opacity-90 leading-relaxed max-w-md">Precision signage, vehicle wraps, and high-impact visual marketing for your brand growth.</p>
               <button onClick={() => setIsAiChatOpen(true)} className="bg-neutral-900 text-white px-8 py-4 rounded-2xl font-black flex items-center gap-3 hover:bg-black transition-all shadow-xl uppercase text-xs tracking-widest">
-                <MessageSquare className="w-5 h-5" /> AI Consultant
+                <MessageSquare className="w-5 h-5" /> Talk to AI Assistant
               </button>
             </div>
             <PenTool className="w-64 h-64 sm:w-96 sm:h-96 text-white/10 absolute -right-10 -bottom-10 rotate-12" />
           </div>
         )}
 
-        {/* ABAS DE CATEGORIA: Wrap e Design Responsivo */}
-        <div className="flex flex-wrap justify-center gap-2 mb-12 px-2">
+        {/* ABAS DE CATEGORIA */}
+        <div className="flex flex-wrap justify-center gap-2 mb-12">
           {CATEGORIES.map(cat => (
             <button
               key={cat}
               onClick={() => setFilter(cat)}
-              className={`px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl text-[9px] sm:text-[11px] font-black uppercase tracking-wider transition-all shadow-sm border ${
+              className={`px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all shadow-sm border ${
                 filter === cat 
                   ? "bg-slate-900 text-white border-slate-900 shadow-xl" 
                   : "bg-white text-slate-500 border-slate-200 hover:border-orange-500 hover:text-orange-600"
-              } max-w-[140px] sm:max-w-none text-center leading-tight whitespace-normal min-h-[44px] flex items-center justify-center`}
+              } max-w-[130px] sm:max-w-none text-center leading-tight whitespace-normal min-h-[44px] flex items-center justify-center`}
             >
               {cat}
             </button>
           ))}
         </div>
 
-        {/* GRID DE TRABALHOS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-10">
+        {/* GRID DE PROJETOS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-10 text-left">
           {filteredProducts.length === 0 && !isAdminMode && (
             <div className="col-span-full py-20 text-center space-y-4">
               <ImageIcon className="w-24 h-24 rounded-full flex items-center justify-center mx-auto text-slate-200" />
@@ -356,11 +392,11 @@ export default function App() {
               <div className="aspect-square rounded-[2rem] overflow-hidden bg-slate-50 mb-6 relative shadow-inner">
                 <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
                 <div className="absolute top-4 left-4 bg-orange-600 text-white text-[8px] font-black px-3 py-1.5 rounded-lg uppercase shadow-lg tracking-widest">
-                    GSI Florida
+                    Florida Shop
                 </div>
               </div>
 
-              <div className="flex-1 px-2 flex flex-col text-left">
+              <div className="flex-1 px-2 flex flex-col">
                 <span className="text-[9px] font-black text-orange-600 uppercase tracking-widest mb-1">{product.category}</span>
                 <h3 className="font-bold text-slate-900 text-lg mb-3 group-hover:text-orange-600 transition-colors leading-tight line-clamp-2">{product.name}</h3>
                 
@@ -369,7 +405,7 @@ export default function App() {
                     <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">Starting</span>
                     <span className="text-xl font-black text-slate-900 leading-tight">${Number(product.price).toLocaleString()}</span>
                   </div>
-                  <button onClick={() => setSelectedProduct(product)} className="bg-slate-900 text-white p-3.5 rounded-2xl hover:bg-orange-600 active:scale-90 transition-all shadow-lg">
+                  <button onClick={() => setSelectedProduct(product)} className="bg-slate-900 text-white p-3.5 rounded-2xl hover:bg-orange-600 transition-all active:scale-90 shadow-lg">
                     <Maximize className="w-4 h-4" />
                   </button>
                 </div>
@@ -379,7 +415,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* SEGURANÇA - LOGIN ADMIN */}
+      {/* MODAL DE SEGURANÇA */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/95 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-white rounded-[2.5rem] p-10 max-w-sm w-full shadow-2xl text-center space-y-6">
@@ -400,7 +436,7 @@ export default function App() {
                 autoFocus
               />
               <div className="flex gap-2">
-                <button type="button" onClick={() => setIsPasswordModalOpen(false)} className="flex-1 p-4 bg-slate-100 rounded-2xl font-bold text-xs uppercase tracking-widest text-slate-900">Cancel</button>
+                <button type="button" onClick={() => setIsPasswordModalOpen(false)} className="flex-1 p-4 bg-slate-100 rounded-2xl font-bold text-xs uppercase tracking-widest text-slate-900">Exit</button>
                 <button type="submit" className="flex-[2] p-4 bg-orange-600 text-white rounded-2xl font-black shadow-lg uppercase text-xs tracking-widest text-white">
                   <ShieldCheck className="w-5 h-5 inline mr-1" /> Unlock
                 </button>
@@ -433,7 +469,7 @@ export default function App() {
                   </div>
                   <button 
                     onClick={() => {
-                      const msg = encodeURIComponent(`Hello! I'm interested in an estimate for "${selectedProduct.name}" from your gallery.`);
+                      const msg = encodeURIComponent(`Hello! I'm interested in an estimate for "${selectedProduct.name}" seen in your gallery.`);
                       window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`, '_blank');
                     }} 
                     className="w-full sm:w-auto bg-orange-600 text-white px-10 py-5 rounded-[1.8rem] sm:rounded-[2.2rem] font-black shadow-xl hover:bg-orange-700 active:scale-95 transition-all flex items-center justify-center gap-3 uppercase text-xs tracking-widest text-white"
@@ -449,7 +485,7 @@ export default function App() {
 
       {/* AI CHATBOT */}
       <div className={`fixed bottom-6 right-6 sm:bottom-8 sm:right-8 z-50 transition-all transform ${isAiChatOpen ? 'scale-100 translate-y-0' : 'scale-0 translate-y-20 pointer-events-none'}`}>
-        <div className="bg-white rounded-[2.5rem] sm:rounded-[3rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] w-[320px] sm:w-[400px] h-[550px] sm:h-[650px] flex flex-col border border-slate-100 overflow-hidden text-slate-900">
+        <div className="bg-white rounded-[2.5rem] sm:rounded-[3rem] shadow-2xl w-[320px] sm:w-[400px] h-[550px] sm:h-[650px] flex flex-col border border-slate-100 overflow-hidden text-slate-900">
           <div className="bg-slate-900 p-6 sm:p-8 text-white flex justify-between items-center relative overflow-hidden text-left">
             <div className="relative z-10 flex items-center gap-3 sm:gap-4">
               <div className="w-12 h-12 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/20"><MessageSquare className="w-6 h-6 text-white" /></div>
@@ -471,7 +507,6 @@ export default function App() {
                 </div>
               </div>
             ))}
-            {isLoadingAi && <div className="text-[9px] font-black text-orange-500 uppercase tracking-widest animate-pulse">Thinking...</div>}
           </div>
           
           <div className="p-5 sm:p-6 bg-white border-t border-slate-100 flex gap-3">
