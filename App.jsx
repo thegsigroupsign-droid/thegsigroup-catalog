@@ -36,17 +36,17 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
   
-  // Estados de Segurança
+  // Estados de Administração e Segurança
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState(false);
   
-  // Estado do Formulário
+  // Estado do Formulário (Inicia com 'Car Wrap' como padrão)
   const [newProduct, setNewProduct] = useState({ name: '', category: 'Car Wrap', price: '', description: '', image: '' });
   
   // Estado do Chat
-  const [aiMessages, setAiMessages] = useState([{ role: 'assistant', text: `Olá! Bem-vindo à ${COMPANY_NAME}. Como posso ajudar no seu projeto hoje?` }]);
+  const [aiMessages, setAiMessages] = useState([{ role: 'assistant', text: `Olá! Bem-vindo à ${COMPANY_NAME}. Sou o seu assistente de projeto. Como posso ajudar hoje?` }]);
   const [userInput, setUserInput] = useState("");
   const [isLoadingAi, setIsLoadingAi] = useState(false);
 
@@ -84,7 +84,9 @@ export default function App() {
       const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [products, filter, searchTerm]);// Handlers de Segurança e Admin
+  }, [products, filter, searchTerm]);
+
+  // Handlers de Segurança e Admin
   const handleAdminToggle = () => {
     if (isAdminMode) {
       setIsAdminMode(false);
@@ -111,7 +113,13 @@ export default function App() {
     if (!user || !isAdminMode) return;
     try {
       const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
-      await addDoc(productsRef, { ...newProduct, price: Number(newProduct.price), rating: 5 });
+      await addDoc(productsRef, { 
+        ...newProduct, 
+        price: Number(newProduct.price), 
+        rating: 5,
+        createdAt: new Date().toISOString()
+      });
+      // Limpa apenas campos de texto, mantém categoria para facilitar sequências de upload
       setNewProduct({ ...newProduct, name: '', price: '', description: '', image: '' });
     } catch (err) { console.error("Erro ao adicionar:", err); }
   };
@@ -129,57 +137,119 @@ export default function App() {
     setAiMessages(prev => [...prev, userMsg]);
     setUserInput("");
     setIsLoadingAi(true);
+
     const apiKey = ""; 
+    const systemPrompt = `Você é um consultor especialista da ${COMPANY_NAME} na Flórida. Realizamos wraps, letreiros e design. Responda em PT, EN ou ES. Inventário atual: ${products.map(p => p.name).join(", ")}`;
+
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: userInput }] }], systemInstruction: { parts: [{ text: `És um consultor especialista da ${COMPANY_NAME} na Flórida.` }] } })
+        body: JSON.stringify({ 
+          contents: [{ parts: [{ text: userInput }] }], 
+          systemInstruction: { parts: [{ text: systemPrompt }] } 
+        })
       });
       const data = await response.json();
-      setAiMessages(prev => [...prev, { role: 'assistant', text: data?.candidates?.[0]?.content?.parts?.[0]?.text || "Como posso ajudar?" }]);
-    } catch (error) { setAiMessages(prev => [...prev, { role: 'assistant', text: "Erro na conexão IA." }]); } finally { setIsLoadingAi(false); }
+      const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "Como posso ajudar no seu projeto visual?";
+      setAiMessages(prev => [...prev, { role: 'assistant', text: aiText }]);
+    } catch (error) {
+      setAiMessages(prev => [...prev, { role: 'assistant', text: "O chat está temporariamente offline." }]);
+    } finally { 
+      setIsLoadingAi(false); 
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-orange-100">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-orange-100 selection:text-orange-900">
+      {/* Cabeçalho Fixo */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 h-20 flex justify-between items-center px-4 sm:px-8 shadow-sm">
         <div className="flex flex-col cursor-pointer" onClick={() => setFilter("Todos")}>
-          <h1 className="text-2xl font-black italic tracking-tighter leading-none uppercase">THE <span style={{ color: PRIMARY_COLOR }}>GSI</span> GROUP</h1>
+          <h1 className="text-2xl font-black italic tracking-tighter leading-none uppercase">
+            THE <span style={{ color: PRIMARY_COLOR }}>GSI</span> GROUP
+          </h1>
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">{COMPANY_TAGLINE}</span>
         </div>
+        
         <div className="flex items-center gap-4">
-          <button onClick={handleAdminToggle} className={`p-3 rounded-2xl transition-all ${isAdminMode ? 'bg-orange-500 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-100'}`}><LayoutDashboard className="w-5 h-5" /></button>
-          <button className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl text-sm font-bold shadow-lg">Contato</button>
+          <button 
+            onClick={handleAdminToggle} 
+            className={`p-3 rounded-2xl transition-all ${isAdminMode ? 'bg-orange-500 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-100'}`}
+            title="Dashboard de Administrador"
+          >
+            <LayoutDashboard className="w-5 h-5" />
+          </button>
+          <button className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl text-sm font-bold shadow-lg hover:bg-black transition-all">
+            Contato
+          </button>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-10">
+        
+        {/* DASHBOARD (Só aparece após senha correta) */}
         {isAdminMode && (
-          <div className="mb-16 space-y-8 animate-in slide-in-from-top duration-500">
+          <div className="mb-16 space-y-8 animate-in slide-in-from-top-4 duration-500">
             <div className="bg-white border-2 border-orange-100 rounded-[3rem] p-8 shadow-2xl">
-              <h2 className="text-2xl font-bold mb-8 flex items-center gap-3 italic"><PlusCircle className="text-orange-500" /> Adicionar Projeto</h2>
+              <div className="flex justify-between items-center mb-8">
+                <div className="flex items-center gap-3">
+                  <div className="bg-orange-500 p-2 rounded-xl text-white"><PlusCircle className="w-6 h-6" /></div>
+                  <h2 className="text-2xl font-bold uppercase italic tracking-tighter">Gerenciar Fotos</h2>
+                </div>
+                <button onClick={() => setIsAdminMode(false)} className="text-slate-400 hover:text-slate-900 font-bold text-xs uppercase tracking-widest bg-slate-100 px-5 py-2.5 rounded-xl">Fechar Painel</button>
+              </div>
+              
               <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <input placeholder="Nome do Trabalho" className="p-4 bg-slate-50 border rounded-2xl outline-orange-500" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
-                <select className="p-4 bg-slate-50 border rounded-2xl outline-orange-500 appearance-none" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
-                  {CATEGORIES.filter(c => c !== "Todos").map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <input placeholder="Preço ($)" type="number" className="p-4 bg-slate-50 border rounded-2xl outline-orange-500" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
-                <input placeholder="Link Direto da Imagem (PostImages.org)" className="md:col-span-3 p-4 bg-slate-50 border rounded-2xl outline-orange-500" value={newProduct.image} onChange={e => setNewProduct({...newProduct, image: e.target.value})} required />
-                <textarea placeholder="Descrição para o catálogo..." className="md:col-span-3 p-4 bg-slate-50 border rounded-2xl outline-orange-500 h-28" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
-                <button type="submit" className="md:col-span-3 bg-orange-600 text-white font-black py-5 rounded-[2rem] shadow-xl active:scale-95 transition-all">Publicar Agora</button>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Nome do Trabalho</label>
+                  <input placeholder="ex: Envelopamento Tesla Model 3" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-orange-500" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Escolher Categoria (Aba)</label>
+                  <select className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-orange-500 appearance-none cursor-pointer" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
+                    {CATEGORIES.filter(c => c !== "Todos").map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Preço Inicial ($)</label>
+                  <input placeholder="3500" type="number" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-orange-500" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
+                </div>
+                <div className="md:col-span-3 space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Link Direto da Imagem (.jpg / .png)</label>
+                  <input placeholder="Copie o 'Link Direto' do PostImages.org aqui" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-orange-500" value={newProduct.image} onChange={e => setNewProduct({...newProduct, image: e.target.value})} required />
+                </div>
+                <div className="md:col-span-3 space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Descrição e Detalhes</label>
+                  <textarea placeholder="Materiais usados, tempo de execução, etc..." className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-orange-500 h-28" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
+                </div>
+                <button type="submit" className="md:col-span-3 bg-orange-600 text-white font-black py-5 rounded-[2rem] hover:bg-orange-700 transition-all shadow-xl shadow-orange-100 uppercase tracking-widest active:scale-95">
+                  Publicar no Catálogo Agora
+                </button>
               </form>
             </div>
+
+            {/* Tabela de Inventário para Deletar */}
             <div className="bg-slate-900 rounded-[3rem] p-8 text-white shadow-2xl">
-              <h3 className="text-xl font-bold mb-6 text-orange-500 italic"><Layers className="inline w-5 h-5 mr-2"/> Inventário Online ({products.length})</h3>
-              <div className="max-h-[300px] overflow-y-auto no-scrollbar pr-2">
+              <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-orange-500 italic"><Layers className="w-5 h-5"/> Trabalhos Publicados ({products.length})</h3>
+              <div className="max-h-[400px] overflow-y-auto no-scrollbar pr-2">
                 <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-[10px] uppercase text-slate-500 border-b border-white/5">
+                      <th className="pb-4 px-4">Projeto</th>
+                      <th className="pb-4 px-4">Categoria</th>
+                      <th className="pb-4 px-4 text-right">Ação</th>
+                    </tr>
+                  </thead>
                   <tbody className="divide-y divide-white/5">
                     {products.map(p => (
-                      <tr key={p.id} className="group hover:bg-white/5">
+                      <tr key={p.id} className="group hover:bg-white/5 transition-colors">
                         <td className="py-4 px-4 font-bold text-sm">{p.name}</td>
                         <td className="py-4 px-4 text-xs text-slate-400 uppercase tracking-widest">{p.category}</td>
-                        <td className="py-4 px-4 text-right"><button onClick={() => handleDeleteProduct(p.id)} className="text-slate-600 hover:text-red-500 p-2"><Trash2 className="w-5 h-5" /></button></td>
+                        <td className="py-4 px-4 text-right">
+                          <button onClick={() => handleDeleteProduct(p.id)} className="text-slate-600 hover:text-red-500 p-2.5 transition-colors bg-white/5 rounded-xl">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -189,33 +259,70 @@ export default function App() {
           </div>
         )}
 
+        {/* Hero Section */}
         {!isAdminMode && (
-          <div className="mb-12 bg-[#F36F21] rounded-[3rem] p-10 text-white relative overflow-hidden flex flex-col md:flex-row items-center justify-between shadow-2xl">
-            <div className="relative z-10 max-w-xl">
-              <h2 className="text-4xl md:text-5xl font-black mb-4 leading-none uppercase tracking-tight text-white">Destaque-se <br/><span className="text-neutral-900 underline decoration-4 underline-offset-8">na Flórida.</span></h2>
-              <p className="text-orange-50 mb-8 text-lg font-medium opacity-90 leading-relaxed">Sinalização de alto impacto e envelopamento profissional para o seu negócio.</p>
-              <button onClick={() => setIsAiChatOpen(true)} className="bg-neutral-900 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-2 hover:bg-black transition-all shadow-xl"><MessageSquare className="w-5 h-5" /> Consultor IA</button>
+          <>
+            <div className="mb-12 bg-[#F36F21] rounded-[3rem] p-10 text-white relative overflow-hidden flex flex-col md:flex-row items-center justify-between shadow-2xl shadow-orange-200/50 border border-white/10">
+              <div className="relative z-10 max-w-xl">
+                <h2 className="text-4xl md:text-5xl font-black mb-4 leading-none uppercase tracking-tight text-white">
+                  Destaque-se <br/><span className="text-neutral-900 underline decoration-4 underline-offset-8">na Flórida.</span>
+                </h2>
+                <p className="text-orange-50 mb-8 text-lg font-medium opacity-90 leading-relaxed">Sinalização de alto impacto, envelopamento profissional e soluções visuais para o seu negócio.</p>
+                <button onClick={() => setIsAiChatOpen(true)} className="bg-neutral-900 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-2 hover:bg-black transition-all shadow-xl">
+                  <MessageSquare className="w-5 h-5" /> Falar com Consultor IA
+                </button>
+              </div>
+              <PenTool className="w-72 h-72 text-white/10 absolute -right-10 -bottom-10 rotate-12" />
             </div>
-            <PenTool className="w-72 h-72 text-white/10 absolute -right-10 -bottom-10 rotate-12" />
-          </div>
+
+            <div className="flex gap-3 overflow-x-auto pb-10 no-scrollbar scroll-smooth">
+              {CATEGORIES.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setFilter(cat)}
+                  className={`px-8 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap shadow-sm ${
+                    filter === cat 
+                      ? "bg-slate-900 text-white shadow-xl shadow-slate-200" 
+                      : "bg-white text-slate-500 border border-slate-200 hover:border-orange-500 hover:text-orange-600"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </>
         )}
 
-        <div className="flex gap-3 overflow-x-auto pb-10 no-scrollbar scroll-smooth">
-          {CATEGORIES.map(cat => (
-            <button key={cat} onClick={() => setFilter(cat)} className={`px-8 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap shadow-sm ${filter === cat ? "bg-slate-900 text-white shadow-xl" : "bg-white text-slate-500 border border-slate-200 hover:border-orange-500"}`}>{cat}</button>
-          ))}
-        </div>
-
+        {/* Galeria de Fotos */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          {filteredProducts.length === 0 && !isAdminMode && (
+            <div className="col-span-full py-20 text-center space-y-4">
+              <ImageIcon className="w-24 h-24 rounded-full flex items-center justify-center mx-auto text-slate-200" />
+              <p className="font-bold text-slate-400 uppercase tracking-widest italic">Aguardando o carregamento dos seus trabalhos...</p>
+            </div>
+          )}
+
           {filteredProducts.map(product => (
-            <div key={product.id} className="group bg-white rounded-[3.5rem] border border-slate-100 p-4 hover:shadow-2xl transition-all duration-500 flex flex-col relative">
-              <div className="aspect-square rounded-[2.5rem] overflow-hidden bg-slate-50 mb-6 relative shadow-inner"><img src={product.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" alt={product.name} /></div>
+            <div key={product.id} className="group bg-white rounded-[3.5rem] border border-slate-100 p-4 hover:shadow-2xl transition-all duration-500 relative flex flex-col">
+              <div className="aspect-square rounded-[2.5rem] overflow-hidden bg-slate-50 mb-6 relative">
+                <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
+                <div className="absolute top-5 left-5 bg-orange-600 text-white text-[9px] font-black px-4 py-2 rounded-xl uppercase tracking-widest shadow-lg">
+                    Florida Service
+                </div>
+              </div>
+
               <div className="flex-1 px-2 flex flex-col">
                 <span className="text-[10px] font-bold text-orange-600 uppercase tracking-widest mb-1">{product.category}</span>
                 <h3 className="font-bold text-slate-900 text-xl mb-3 group-hover:text-orange-600 transition-colors leading-tight">{product.name}</h3>
+                
                 <div className="flex justify-between items-center mt-auto pt-6 border-t border-slate-50">
-                  <span className="text-2xl font-black text-slate-900">${product.price}</span>
-                  <button onClick={() => setSelectedProduct(product)} className="bg-slate-900 text-white p-4 rounded-[1.5rem] shadow-lg active:scale-90 transition-all"><Maximize className="w-4 h-4" /></button>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">A partir de</span>
+                    <span className="text-2xl font-black text-slate-900">${Number(product.price).toLocaleString()}</span>
+                  </div>
+                  <button onClick={() => setSelectedProduct(product)} className="bg-slate-900 text-white p-4 rounded-[1.5rem] hover:bg-orange-600 transition-all active:scale-90 shadow-lg">
+                    <Maximize className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -223,32 +330,71 @@ export default function App() {
         </div>
       </main>
 
+      {/* MODAL DE SEGURANÇA (Senha Admin) */}
       {isPasswordModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-xl animate-in fade-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-white rounded-[3rem] p-10 max-w-sm w-full shadow-2xl text-center space-y-6">
-            <Lock className="w-12 h-12 text-orange-600 mx-auto" />
-            <h2 className="text-2xl font-black italic uppercase leading-none">Admin Access</h2>
+            <div className="w-24 h-24 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+              <Lock className="w-12 h-12" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-black italic tracking-tighter uppercase leading-none">Admin Access</h2>
+              <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.2em]">The GSI Group Credentials</p>
+            </div>
             <form onSubmit={handlePasswordSubmit} className="space-y-4">
-              <input type="password" placeholder="SENHA" className={`w-full p-6 bg-slate-50 border-2 rounded-2xl text-center text-xl font-bold outline-none ${passwordError ? 'border-red-500 bg-red-50' : 'border-slate-100'}`} value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoFocus />
-              <button type="submit" className="w-full p-5 bg-orange-600 text-white rounded-2xl font-black shadow-lg hover:bg-orange-700 transition-all">Desbloquear</button>
+              <input 
+                type="password" 
+                placeholder="SENHA" 
+                className={`w-full p-6 bg-slate-50 border-2 rounded-2xl text-center text-xl font-bold focus:ring-4 focus:ring-orange-200 outline-none transition-all ${passwordError ? 'border-red-500 bg-red-50 animate-shake' : 'border-slate-100'}`}
+                value={passwordInput}
+                onChange={e => setPasswordInput(e.target.value)}
+                autoFocus
+              />
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setIsPasswordModalOpen(false)} className="flex-1 p-5 bg-slate-100 rounded-2xl font-bold hover:bg-slate-200 transition-all text-xs uppercase tracking-widest">Sair</button>
+                <button type="submit" className="flex-[2] p-5 bg-orange-600 text-white rounded-2xl font-black shadow-lg shadow-orange-100 hover:bg-orange-700 transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest">
+                  <ShieldCheck className="w-5 h-5" /> Entrar
+                </button>
+              </div>
+              {passwordError && <p className="text-red-500 text-[10px] font-black uppercase tracking-widest animate-pulse mt-2">Chave Incorreta</p>}
             </form>
           </div>
         </div>
       )}
 
+      {/* Detalhes do Trabalho Modal */}
       {selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-md overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-md overflow-y-auto">
           <div className="bg-white rounded-[4rem] max-w-5xl w-full flex flex-col md:flex-row overflow-hidden shadow-2xl my-auto animate-in zoom-in duration-300">
-            <div className="md:w-1/2 h-[400px] md:h-auto relative bg-slate-100 shadow-inner"><img src={selectedProduct.image} className="w-full h-full object-cover" alt={selectedProduct.name} /></div>
-            <div className="md:w-1/2 p-10 md:p-16 flex flex-col justify-center relative">
-              <button onClick={() => setSelectedProduct(null)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-900 transition-colors"><X className="w-8 h-8" /></button>
+            <div className="md:w-1/2 h-[400px] md:h-auto relative bg-slate-100">
+              <img src={selectedProduct.image} className="w-full h-full object-cover" alt={selectedProduct.name} />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+            </div>
+            <div className="md:w-1/2 p-10 md:p-16 flex flex-col justify-center">
+              <button onClick={() => setSelectedProduct(null)} className="self-end text-slate-300 hover:text-slate-900 mb-4 transition-colors"><X className="w-8 h-8" /></button>
               <div>
-                <span className="text-orange-600 font-black text-xs uppercase tracking-widest">{selectedProduct.category}</span>
-                <h2 className="text-5xl font-black text-slate-900 mt-6 mb-10 leading-tight">{selectedProduct.name}</h2>
-                <p className="text-slate-600 mb-10 leading-relaxed text-lg">{selectedProduct.description}</p>
-                <div className="flex flex-col sm:flex-row justify-between items-center gap-6 pt-10 border-t border-slate-100 mt-auto">
-                  <span className="text-4xl font-black text-slate-900">${Number(selectedProduct.price).toLocaleString()}</span>
-                  <button onClick={() => window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=Quero um orçamento para ${selectedProduct.name}`)} className="bg-orange-600 text-white px-14 py-6 rounded-[2.5rem] font-black shadow-xl flex items-center gap-4">Orçamento <ExternalLink className="w-5 h-5" /></button>
+                <span className="text-orange-600 font-black text-xs uppercase tracking-[0.4em] bg-orange-50 px-4 py-2 rounded-xl">{selectedProduct.category}</span>
+                <h2 className="text-5xl font-black text-slate-900 mt-6 mb-10 leading-tight tracking-tighter">{selectedProduct.name}</h2>
+                
+                <div className="bg-slate-50 p-8 rounded-[3rem] mb-12 border border-slate-100 shadow-inner">
+                  <h4 className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-4 italic">Sobre o Trabalho</h4>
+                  <p className="text-slate-600 leading-relaxed text-lg">{selectedProduct.description}</p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-10 pt-10 border-t border-slate-100 mt-auto">
+                  <div className="text-center sm:text-left">
+                    <span className="text-xs text-slate-400 font-black uppercase tracking-widest block mb-1">Preço Estimado</span>
+                    <span className="text-4xl font-black text-slate-900">${Number(selectedProduct.price).toLocaleString()}</span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const msg = encodeURIComponent(`Olá GSI! Gostaria de um orçamento para ${selectedProduct.name}.`);
+                      window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`, '_blank');
+                    }} 
+                    className="w-full sm:w-auto bg-orange-600 text-white px-14 py-6 rounded-[2.5rem] font-black shadow-xl hover:bg-orange-700 transition-all flex items-center justify-center gap-4 active:scale-95"
+                  >
+                    Orçamento WhatsApp <ExternalLink className="w-5 h-5" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -256,25 +402,56 @@ export default function App() {
         </div>
       )}
 
+      {/* Assistente IA */}
       <div className={`fixed bottom-8 right-8 z-50 transition-all transform ${isAiChatOpen ? 'scale-100 translate-y-0' : 'scale-0 translate-y-20 pointer-events-none'}`}>
         <div className="bg-white rounded-[3.5rem] shadow-2xl w-[360px] sm:w-[420px] h-[650px] flex flex-col border border-slate-100 overflow-hidden">
-          <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
-            <div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg"><MessageSquare className="w-6 h-6 text-white" /></div><h4 className="font-bold text-sm tracking-wide text-white">Assistente IA</h4></div>
-            <button onClick={() => setIsAiChatOpen(false)}><X className="w-5 h-5" /></button>
+          <div className="bg-slate-900 p-8 text-white flex justify-between items-center relative overflow-hidden">
+            <div className="relative z-10 flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg"><MessageSquare className="w-7 h-7 text-white" /></div>
+              <div>
+                <h4 className="font-bold text-sm tracking-wide">Assistente IA</h4>
+                <p className="text-[10px] text-orange-400 font-bold uppercase tracking-widest">Equipa Flórida</p>
+              </div>
+            </div>
+            <button onClick={() => setIsAiChatOpen(false)} className="relative z-10 bg-white/10 p-3 rounded-xl hover:bg-white/20 transition-colors"><X className="w-5 h-5" /></button>
           </div>
+          
           <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/50 no-scrollbar">
             {aiMessages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[85%] p-5 rounded-[2rem] text-sm leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-orange-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-100'}`}>{msg.text}</div></div>
+              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[85%] p-5 rounded-[2rem] text-sm leading-relaxed shadow-sm ${
+                  msg.role === 'user' ? 'bg-orange-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-100'
+                }`}>
+                  {msg.text}
+                </div>
+              </div>
             ))}
           </div>
+          
           <div className="p-6 bg-white border-t border-slate-100 flex gap-3">
-            <input className="flex-1 bg-slate-100 rounded-2xl px-6 py-4 text-sm outline-none focus:ring-2 focus:ring-orange-500" placeholder="Pergunte aqui..." value={userInput} onChange={e => setUserInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSendMessage()} />
+            <input 
+              className="flex-1 bg-slate-100 rounded-2xl px-6 py-4 text-sm outline-none focus:ring-2 focus:ring-orange-500" 
+              placeholder="Pergunte aqui..." 
+              value={userInput} 
+              onChange={e => setUserInput(e.target.value)} 
+              onKeyPress={e => e.key === 'Enter' && handleSendMessage()} 
+            />
             <button onClick={handleSendMessage} className="bg-slate-900 text-white p-4 rounded-2xl shadow-xl hover:bg-orange-600 transition-all"><Send className="w-4 h-4" /></button>
           </div>
         </div>
       </div>
-      {!isAiChatOpen && <button onClick={() => setIsAiChatOpen(true)} className="fixed bottom-10 right-10 bg-orange-500 text-white p-6 rounded-[2.5rem] shadow-2xl hover:scale-110 active:scale-95 transition-all z-40 group shadow-orange-500/40"><MessageSquare className="w-8 h-8" /></button>}
-      <footer className="bg-slate-900 text-white py-16 mt-20 text-center border-t border-white/5"><h2 className="text-2xl font-black italic uppercase tracking-tighter mb-4">THE <span className="text-orange-500">GSI</span> GROUP</h2><p className="text-slate-500 text-[10px] uppercase tracking-[0.4em]">© 2026 THE GSI GROUP • FLORIDA • USA</p></footer>
+
+      {!isAiChatOpen && (
+        <button onClick={() => setIsAiChatOpen(true)} className="fixed bottom-10 right-10 bg-orange-500 text-white p-6 rounded-[2.5rem] shadow-2xl hover:scale-110 active:scale-95 transition-all z-40 group shadow-orange-500/40">
+          <MessageSquare className="w-8 h-8" />
+        </button>
+      )}
+
+      {/* Rodapé */}
+      <footer className="bg-slate-900 text-white py-24 mt-20 text-center border-t border-white/5">
+        <h2 className="text-2xl font-black italic uppercase tracking-tighter leading-none mb-4">
+          THE <span className="text-orange-500">GSI</span> GROUP
+        </h2>
+        <p className="text-slate-500 text-[10px] uppercase tracking-[0.4em]">© 2026 THE GSI GROUP • FLORIDA • USA</p>
+      </footer>
     </div>
-  );
-}
