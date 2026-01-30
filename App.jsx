@@ -3,7 +3,8 @@ import {
   Search, ShoppingCart, ChevronRight, Filter, MessageSquare, X, Send,
   Info, Package, Star, Zap, Plus, Trash2, Settings, Image as ImageIcon,
   ExternalLink, PenTool, Layers, Printer, Truck, Maximize,
-  LayoutDashboard, PlusCircle, Lock, ShieldCheck, AlertCircle, CheckCircle2
+  LayoutDashboard, PlusCircle, Lock, ShieldCheck, AlertCircle, CheckCircle2,
+  Database, HelpCircle
 } from 'lucide-react';
 
 // Firebase Imports
@@ -15,10 +16,10 @@ import { getFirestore, collection, doc, onSnapshot, addDoc, deleteDoc, query } f
 const COMPANY_NAME = "The GSI Group";
 const COMPANY_TAGLINE = "Signs & Visual Communication";
 const PRIMARY_COLOR = "#F36F21"; 
-const WHATSAPP_NUMBER = "14074885194"; // Número oficial US
+const WHATSAPP_NUMBER = "14074885194"; 
 const ADMIN_PASSWORD = "GSI_FLORIDA_2026"; 
 
-// Lista de categorias oficiais
+// Lista de categorias oficiais (O código agora ignora diferenças entre Maiúsculas e Minúsculas)
 const CATEGORIES = [
   "All", 
   "Digital marketing", 
@@ -32,22 +33,38 @@ const CATEGORIES = [
   "Wall Graphics"
 ];
 
-// --- INICIALIZAÇÃO SEGURA DO FIREBASE ---
+// --- INICIALIZAÇÃO DO FIREBASE ---
+// NOTA: Se publicar na Vercel, deve configurar estas chaves no Firebase Console
+// ou o sistema continuará a dar o erro de "Database not connected".
 let db = null;
 let auth = null;
 let appId = typeof __app_id !== 'undefined' ? __app_id : 'the-gsi-group-final';
 
-try {
-  // Verificação ultra-segura para evitar ecrã branco no Vercel/Ambientes Externos
-  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-    const firebaseConfig = JSON.parse(__firebase_config);
-    const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-    auth = getAuth(app);
-    db = getFirestore(app);
+const initFirebase = () => {
+  try {
+    let config = null;
+    
+    // 1. Tenta carregar a configuração do ambiente Gemini (Canvas)
+    if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+      config = JSON.parse(__firebase_config);
+    } 
+    // 2. Se não houver config (Vercel), a aplicação precisará que insira as chaves abaixo
+    // ou que as defina como variáveis de ambiente.
+    
+    if (config) {
+      const app = getApps().length === 0 ? initializeApp(config) : getApps()[0];
+      auth = getAuth(app);
+      db = getFirestore(app);
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.error("Firebase Init Error:", e);
+    return false;
   }
-} catch (e) {
-  console.warn("Base de dados não detetada. O modo de demonstração foi ativado.");
-}
+};
+
+const firebaseIsActive = initFirebase();
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -58,16 +75,13 @@ export default function App() {
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  // Estado para mensagens de feedback no Dashboard
   const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
   
-  // Estados de Admin e Segurança
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState(false);
   
-  // Estado do Formulário
   const [newProduct, setNewProduct] = useState({ 
     name: '', 
     category: 'Digital marketing', 
@@ -76,7 +90,6 @@ export default function App() {
     image: '' 
   });
   
-  // Estado do Chat IA
   const [aiMessages, setAiMessages] = useState([{ 
     role: 'assistant', 
     text: `Hello! Welcome to ${COMPANY_NAME}. I'm your project consultant. How can I help you?` 
@@ -84,7 +97,7 @@ export default function App() {
   const [userInput, setUserInput] = useState("");
   const [isLoadingAi, setIsLoadingAi] = useState(false);
 
-  // Autenticação (Regra 3)
+  // Autenticação
   useEffect(() => {
     if (!auth) return;
     const initAuth = async () => {
@@ -94,16 +107,14 @@ export default function App() {
         } else {
           await signInAnonymously(auth);
         }
-      } catch (err) { 
-        console.error("Erro de autenticação:", err); 
-      }
+      } catch (err) { console.error("Auth error:", err); }
     };
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, setUser);
     return () => unsubscribe();
   }, []);
 
-  // Sincronização em tempo real (Regra 1)
+  // Dados em Tempo Real
   useEffect(() => {
     if (!db || !user) return;
     const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
@@ -111,21 +122,23 @@ export default function App() {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setProducts(docs);
     }, (error) => {
-      console.error("Erro Firestore:", error);
+      console.error("Firestore error:", error);
+      setStatusMsg({ type: 'error', text: 'Cloud Sync Failed. Check permissions.' });
     });
     return () => unsubscribe();
   }, [user]);
 
-  // Filtragem (Regra 2)
+  // Filtragem Robusta (Case-Insensitive)
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
-      const matchesCategory = filter === "All" || p.category === filter;
-      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const pCat = (p.category || "").toLowerCase();
+      const fCat = filter.toLowerCase();
+      const matchesCategory = fCat === "all" || pCat === fCat;
+      const matchesSearch = (p.name || "").toLowerCase().includes(searchTerm.toLowerCase());
       return matchesCategory && matchesSearch;
     });
   }, [products, filter, searchTerm]);
 
-  // Handlers de Segurança
   const handleAdminToggle = () => {
     if (isAdminMode) {
       setIsAdminMode(false);
@@ -147,26 +160,28 @@ export default function App() {
     }
   };
 
-  // --- FUNÇÃO DE SALVAMENTO CORRIGIDA ---
+  // --- FUNÇÃO DE SALVAMENTO COM FEEDBACK MELHORADO ---
   const handleAddProduct = async (e) => {
     e.preventDefault();
     
     if (!db) {
-      setStatusMsg({ type: 'error', text: 'Error: Database not connected. Please check setup.' });
+      setStatusMsg({ 
+        type: 'error', 
+        text: 'Database Disconnected: To save on Vercel, you must add your Firebase API keys to the code.' 
+      });
       return;
     }
     
     if (!user || !isAdminMode || isSaving) return;
     
     setIsSaving(true);
-    setStatusMsg({ type: 'info', text: 'Publishing to catalog...' });
+    setStatusMsg({ type: 'info', text: 'Publishing to GSI Cloud...' });
 
     try {
       const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
       
-      // Validação básica dos dados
       const priceValue = Number(newProduct.price);
-      if (isNaN(priceValue)) throw new Error("Preço inválido.");
+      if (isNaN(priceValue)) throw new Error("Invalid Price");
 
       await addDoc(productsRef, { 
         name: newProduct.name,
@@ -177,16 +192,13 @@ export default function App() {
         createdAt: new Date().toISOString()
       });
 
-      setStatusMsg({ type: 'success', text: 'Work published successfully!' });
-      // Limpa apenas os campos de texto, mantém a categoria para o próximo upload
+      setStatusMsg({ type: 'success', text: 'Work added to live catalog!' });
       setNewProduct({ ...newProduct, name: '', price: '', description: '', image: '' });
       
-      // Limpa a mensagem de sucesso após 3 segundos
-      setTimeout(() => setStatusMsg({ type: '', text: '' }), 3000);
-
+      setTimeout(() => setStatusMsg({ type: '', text: '' }), 4000);
     } catch (err) { 
-      console.error("Erro ao salvar:", err); 
-      setStatusMsg({ type: 'error', text: 'Failed to save. Try again.' });
+      console.error("Critical Save Error:", err); 
+      setStatusMsg({ type: 'error', text: 'Save failed: Check your database rules.' });
     } finally {
       setIsSaving(false);
     }
@@ -194,14 +206,14 @@ export default function App() {
 
   const handleDeleteProduct = async (id) => {
     if (!db || !user || !isAdminMode) return;
+    if (!window.confirm("Delete this item forever?")) return;
     try {
       await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
-    } catch (err) { 
-      console.error("Erro ao apagar:", err); 
-    }
+      setStatusMsg({ type: 'success', text: 'Item removed.' });
+      setTimeout(() => setStatusMsg({ type: '', text: '' }), 2000);
+    } catch (err) { console.error("Delete error:", err); }
   };
 
-  // Chat IA
   const handleSendMessage = async () => {
     if (!userInput.trim() || isLoadingAi) return;
     const userMsg = { role: 'user', text: userInput };
@@ -210,7 +222,7 @@ export default function App() {
     setIsLoadingAi(true);
 
     const apiKey = ""; 
-    const systemPrompt = `You are a consultant for ${COMPANY_NAME} in Florida. Speak English, Portuguese, or Spanish. Services: ${CATEGORIES.join(", ")}.`;
+    const systemPrompt = `You are a professional project manager for ${COMPANY_NAME} Florida. You speak EN, PT, ES. Services: ${CATEGORIES.join(", ")}.`;
 
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
@@ -222,17 +234,11 @@ export default function App() {
         })
       });
       const data = await response.json();
-      const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "I'm here to help!";
+      const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "I'm here to help with your signage project!";
       setAiMessages(prev => [...prev, { role: 'assistant', text: aiText }]);
     } catch (error) {
-      setAiMessages(prev => [...prev, { role: 'assistant', text: "Service temporarily offline." }]);
-    } finally { 
-      setIsLoadingAi(false); 
-    }
-  };
-
-  const openWhatsApp = () => {
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}`, '_blank');
+      setAiMessages(prev => [...prev, { role: 'assistant', text: "Assistant is busy. Please try again." }]);
+    } finally { setIsLoadingAi(false); }
   };
 
   return (
@@ -250,12 +256,11 @@ export default function App() {
           <button 
             onClick={handleAdminToggle} 
             className={`p-2.5 sm:p-3 rounded-2xl transition-all ${isAdminMode ? 'bg-orange-500 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-100'}`}
-            title="Dashboard Access"
           >
             <LayoutDashboard className="w-5 h-5" />
           </button>
           <button 
-            onClick={openWhatsApp}
+            onClick={() => window.open(`https://wa.me/${WHATSAPP_NUMBER}`, '_blank')}
             className="bg-slate-900 text-white px-5 py-2 sm:px-6 sm:py-2.5 rounded-2xl text-[12px] sm:text-sm font-bold shadow-lg hover:bg-black transition-all uppercase"
           >
             Contact
@@ -268,31 +273,46 @@ export default function App() {
         {/* PAINEL ADMINISTRATIVO */}
         {isAdminMode && (
           <div className="mb-16 space-y-8 animate-in slide-in-from-top-4 duration-500 text-left">
+            
+            {!db && (
+              <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-[2rem] flex items-start gap-4">
+                <AlertCircle className="text-amber-600 w-10 h-10 shrink-0" />
+                <div>
+                  <h4 className="font-bold text-amber-900 uppercase text-sm">Vercel Deployment Detected</h4>
+                  <p className="text-amber-700 text-xs mt-1 leading-relaxed">
+                    A base de dados do Gemini não funciona automaticamente fora deste chat. 
+                    Para que o botão <strong>Publish</strong> funcione no seu site real, precisa de criar um projeto no 
+                    <a href="https://console.firebase.google.com/" target="_blank" className="underline font-bold ml-1">Firebase Console</a> 
+                    e inserir as suas chaves no código.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="bg-white border-2 border-orange-100 rounded-[2.5rem] p-6 sm:p-10 shadow-2xl relative">
               <div className="flex justify-between items-center mb-8">
                 <div className="flex items-center gap-3 text-orange-600 font-bold">
                   <PlusCircle className="w-6 h-6" />
-                  <h2 className="text-2xl italic uppercase tracking-tighter text-slate-900">Publish Work</h2>
+                  <h2 className="text-2xl italic uppercase tracking-tighter text-slate-900">Add New Project</h2>
                 </div>
                 <button onClick={() => setIsAdminMode(false)} className="text-slate-400 font-bold text-xs uppercase bg-slate-100 px-4 py-2 rounded-xl">Exit Admin</button>
               </div>
 
-              {/* MENSAGENS DE ESTADO */}
               {statusMsg.text && (
-                <div className={`mb-6 p-4 rounded-2xl flex items-center gap-3 font-bold text-sm animate-in fade-in zoom-in duration-300 ${
+                <div className={`mb-6 p-4 rounded-2xl flex items-center gap-3 font-bold text-sm animate-bounce ${
                   statusMsg.type === 'error' ? 'bg-red-50 text-red-600' : 
                   statusMsg.type === 'success' ? 'bg-green-50 text-green-600' : 
                   'bg-blue-50 text-blue-600'
                 }`}>
-                  {statusMsg.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                  {statusMsg.type === 'error' ? <AlertCircle /> : <CheckCircle2 />}
                   {statusMsg.text}
                 </div>
               )}
               
               <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Work Title</label>
-                  <input placeholder="e.g. Ford Transit Wrap" className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 text-sm" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Project Name</label>
+                  <input placeholder="Ford Transit Wrap" className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 text-sm" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Category (Tab)</label>
@@ -301,30 +321,30 @@ export default function App() {
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Starting Price ($)</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Price ($)</label>
                   <input placeholder="2500" type="number" className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 text-sm" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
                 </div>
                 <div className="md:col-span-3 space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Image Link (Direct .jpg / .png)</label>
-                  <input placeholder="Paste the Direct Link from PostImages.org here" className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 text-sm" value={newProduct.image} onChange={e => setNewProduct({...newProduct, image: e.target.value})} required />
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Image Link (Use PostImages.org)</label>
+                  <input placeholder="https://i.postimg.cc/image.jpg" className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 text-sm" value={newProduct.image} onChange={e => setNewProduct({...newProduct, image: e.target.value})} required />
                 </div>
                 <div className="md:col-span-3 space-y-1">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Work Description</label>
-                  <textarea placeholder="Detail materials, turnaround time, etc..." className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 h-24 text-sm" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
+                  <textarea placeholder="Tell customers about quality and materials..." className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 h-24 text-sm" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
                 </div>
                 <button 
                   type="submit" 
                   disabled={isSaving}
                   className="md:col-span-3 bg-orange-600 text-white font-black py-5 rounded-[2rem] shadow-xl uppercase active:scale-95 transition-all text-sm tracking-widest disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {isSaving ? "Saving to Catalog..." : "Publish to Catalog Now"}
+                  {isSaving ? "Syncing..." : "Add to Live Catalog"}
                 </button>
               </form>
             </div>
 
             <div className="bg-slate-900 rounded-[2.5rem] p-6 sm:p-10 text-white shadow-2xl overflow-hidden">
-              <h3 className="text-xl font-bold mb-6 italic uppercase tracking-tighter flex items-center gap-2"><Layers className="text-orange-500 w-5 h-5"/> Live Inventory ({products.length} items)</h3>
-              <div className="max-h-[300px] overflow-y-auto no-scrollbar pr-2">
+              <h3 className="text-xl font-bold mb-6 italic uppercase tracking-tighter flex items-center gap-2"><Layers className="text-orange-500 w-5 h-5"/> Live Inventory ({products.length})</h3>
+              <div className="max-h-[300px] overflow-y-auto no-scrollbar">
                 <table className="w-full text-left">
                   <tbody className="divide-y divide-white/5">
                     {products.map(p => (
@@ -352,9 +372,9 @@ export default function App() {
               <h2 className="text-4xl sm:text-6xl font-black mb-4 leading-none uppercase tracking-tighter text-white">
                 Stand Out <br/><span className="text-neutral-900 underline decoration-4 underline-offset-8">in Florida.</span>
               </h2>
-              <p className="text-orange-50 mb-8 text-base sm:text-lg font-medium opacity-90 leading-relaxed max-w-md">Precision signage, vehicle wraps, and high-impact visual marketing for your brand growth.</p>
+              <p className="text-orange-50 mb-8 text-base sm:text-lg font-medium opacity-90 leading-relaxed max-w-md">Florida's premium choice for vehicle branding, signage, and visual marketing.</p>
               <button onClick={() => setIsAiChatOpen(true)} className="bg-neutral-900 text-white px-8 py-4 rounded-2xl font-black flex items-center gap-3 hover:bg-black transition-all shadow-xl uppercase text-xs tracking-widest">
-                <MessageSquare className="w-5 h-5" /> Talk to AI Assistant
+                <MessageSquare className="w-5 h-5" /> AI Consultant
               </button>
             </div>
             <PenTool className="w-64 h-64 sm:w-96 sm:h-96 text-white/10 absolute -right-10 -bottom-10 rotate-12" />
@@ -368,7 +388,7 @@ export default function App() {
               key={cat}
               onClick={() => setFilter(cat)}
               className={`px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all shadow-sm border ${
-                filter === cat 
+                filter.toLowerCase() === cat.toLowerCase() 
                   ? "bg-slate-900 text-white border-slate-900 shadow-xl" 
                   : "bg-white text-slate-500 border-slate-200 hover:border-orange-500 hover:text-orange-600"
               } max-w-[130px] sm:max-w-none text-center leading-tight whitespace-normal min-h-[44px] flex items-center justify-center`}
@@ -383,7 +403,7 @@ export default function App() {
           {filteredProducts.length === 0 && !isAdminMode && (
             <div className="col-span-full py-20 text-center space-y-4">
               <ImageIcon className="w-24 h-24 rounded-full flex items-center justify-center mx-auto text-slate-200" />
-              <p className="font-bold text-slate-400 uppercase tracking-widest italic text-xs">Waiting for the catalog items to load...</p>
+              <p className="font-bold text-slate-400 uppercase tracking-widest italic text-xs">Waiting for your works to load...</p>
             </div>
           )}
 
@@ -392,7 +412,7 @@ export default function App() {
               <div className="aspect-square rounded-[2rem] overflow-hidden bg-slate-50 mb-6 relative shadow-inner">
                 <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
                 <div className="absolute top-4 left-4 bg-orange-600 text-white text-[8px] font-black px-3 py-1.5 rounded-lg uppercase shadow-lg tracking-widest">
-                    Florida Shop
+                    GSI Elite
                 </div>
               </div>
 
@@ -405,7 +425,7 @@ export default function App() {
                     <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">Starting</span>
                     <span className="text-xl font-black text-slate-900 leading-tight">${Number(product.price).toLocaleString()}</span>
                   </div>
-                  <button onClick={() => setSelectedProduct(product)} className="bg-slate-900 text-white p-3.5 rounded-2xl hover:bg-orange-600 transition-all active:scale-90 shadow-lg">
+                  <button onClick={() => setSelectedProduct(product)} className="bg-slate-900 text-white p-3.5 rounded-2xl hover:bg-orange-600 active:scale-90 transition-all shadow-lg">
                     <Maximize className="w-4 h-4" />
                   </button>
                 </div>
@@ -415,7 +435,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* MODAL DE SEGURANÇA */}
+      {/* SEGURANÇA */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/95 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-white rounded-[2.5rem] p-10 max-w-sm w-full shadow-2xl text-center space-y-6">
@@ -446,15 +466,15 @@ export default function App() {
         </div>
       )}
 
-      {/* DETALHES DO TRABALHO */}
+      {/* DETALHES */}
       {selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-md overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-md overflow-y-auto text-left">
           <div className="bg-white rounded-[3rem] sm:rounded-[4rem] max-w-5xl w-full flex flex-col md:flex-row overflow-hidden shadow-2xl my-auto animate-in zoom-in duration-300">
-            <div className="md:w-1/2 h-[350px] md:h-auto relative bg-slate-100 shadow-inner">
+            <div className="md:w-1/2 h-[350px] md:h-auto relative bg-slate-100">
               <img src={selectedProduct.image} className="w-full h-full object-cover" alt={selectedProduct.name} />
               <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent"></div>
             </div>
-            <div className="md:w-1/2 p-8 sm:p-14 flex flex-col justify-center text-left relative">
+            <div className="md:w-1/2 p-8 sm:p-14 flex flex-col justify-center relative">
               <button onClick={() => setSelectedProduct(null)} className="absolute top-6 right-6 sm:top-10 sm:right-10 text-slate-300 hover:text-slate-900 transition-colors"><X className="w-8 h-8" /></button>
               <div>
                 <span className="text-orange-600 font-black text-[10px] uppercase tracking-[0.4em] bg-orange-50 px-4 py-2 rounded-xl">{selectedProduct.category}</span>
@@ -490,7 +510,7 @@ export default function App() {
             <div className="relative z-10 flex items-center gap-3 sm:gap-4">
               <div className="w-12 h-12 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/20"><MessageSquare className="w-6 h-6 text-white" /></div>
               <div className="text-left">
-                <h4 className="font-bold text-sm">AI Assistant</h4>
+                <h4 className="font-bold text-sm tracking-wide text-white">AI Assistant</h4>
                 <p className="text-[9px] text-orange-400 font-bold uppercase tracking-widest">Florida Team</p>
               </div>
             </div>
