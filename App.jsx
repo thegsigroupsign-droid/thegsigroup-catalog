@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, ShoppingCart, ChevronRight, Filter, MessageSquare, X, Send,
   Info, Package, Star, Zap, Plus, Trash2, Settings, Image as ImageIcon,
   ExternalLink, PenTool, Layers, Printer, Truck, Maximize,
   LayoutDashboard, PlusCircle, Lock, ShieldCheck, AlertCircle, CheckCircle2,
-  ArrowUpDown, Share2, BarChart3, TrendingUp, ChevronDown, MapPin, Mail, Phone, Globe
+  ArrowUpDown, Share2, BarChart3, TrendingUp, ChevronDown, MapPin, Mail, Phone, Globe,
+  Command
 } from 'lucide-react';
 
 // Importações do Firebase
@@ -23,7 +24,7 @@ const VERCEL_FIREBASE_CONFIG = {
   measurementId: "G-FHDQQKEE7E"
 };
 
-// --- CONFIGURAÇÕES PADRÃO (Serão sobrescritas pelo Firebase se existirem) ---
+// --- CONFIGURAÇÕES PADRÃO ---
 const DEFAULT_SETTINGS = {
   companyName: "The GSI Group",
   tagline: "Signs & Visual Communication",
@@ -73,7 +74,10 @@ export default function App() {
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState(false);
   
-  // Estados de Edição de Configurações
+  // Ref para a caixa de pesquisa
+  const searchInputRef = useRef(null);
+
+  // Estados de Edição
   const [editSettings, setEditSettings] = useState(DEFAULT_SETTINGS);
   const [newProduct, setNewProduct] = useState({ name: '', category: 'Digital marketing', price: '', description: '', image: '' });
   
@@ -82,6 +86,22 @@ export default function App() {
   const [userInput, setUserInput] = useState("");
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [isMobileCategoryMenuOpen, setIsMobileCategoryMenuOpen] = useState(false);
+
+  // Efeito para o atalho de teclado da pesquisa ( / ou Cmd+K )
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (!auth) return;
@@ -246,9 +266,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-orange-100 overflow-x-hidden">
-      {/* HEADER */}
+      {/* HEADER REFINADO */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 h-20 flex justify-between items-center px-4 sm:px-8 shadow-sm transition-all">
-        <div className="flex flex-col cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setFilter("All")}>
+        <div className="flex flex-col cursor-pointer hover:opacity-80 transition-opacity shrink-0" onClick={() => setFilter("All")}>
           {siteSettings.logoUrl ? (
             <img src={siteSettings.logoUrl} alt={siteSettings.companyName} className="h-10 sm:h-12 w-auto object-contain" />
           ) : (
@@ -258,15 +278,50 @@ export default function App() {
             </>
           )}
         </div>
-        <div className="flex items-center gap-2 sm:gap-4">
+
+        {/* BARRA DE PESQUISA CENTRAL COM ATALHO */}
+        <div className="hidden md:flex flex-1 max-w-md mx-8 relative group">
+          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-orange-500 transition-colors">
+            <Search className="w-4 h-4" />
+          </div>
+          <input 
+            ref={searchInputRef}
+            type="text" 
+            placeholder="Search projects..." 
+            className="w-full bg-slate-100/50 border border-slate-200 py-2.5 pl-11 pr-12 rounded-2xl text-sm outline-none focus:bg-white focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all font-medium"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+            <kbd className="hidden lg:inline-flex h-6 items-center gap-1 rounded border border-slate-200 bg-white px-1.5 font-sans text-[10px] font-black text-slate-400">
+              <span className="text-xs">/</span>
+            </kbd>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           <button onClick={() => isAdminMode ? setIsAdminMode(false) : setIsPasswordModalOpen(true)} className={`p-2.5 rounded-2xl transition-all ${isAdminMode ? 'bg-orange-500 text-white shadow-lg ring-4 ring-orange-100' : 'text-slate-400 hover:bg-slate-100'}`}>
             <LayoutDashboard className="w-5 h-5" />
           </button>
-          <button onClick={() => window.open(`https://wa.me/${siteSettings.whatsapp}`, '_blank')} className="bg-slate-900 text-white px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-[10px] sm:text-sm font-bold shadow-xl hover:bg-black hover:scale-105 transition-all uppercase tracking-widest">
+          <button onClick={() => window.open(`https://wa.me/${siteSettings.whatsapp}`, '_blank')} className="bg-slate-900 text-white px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-[10px] sm:text-sm font-bold shadow-xl hover:bg-black hover:scale-105 active:scale-95 transition-all uppercase tracking-widest">
             Contact
           </button>
         </div>
       </header>
+
+      {/* MOBILE SEARCH BAR */}
+      <div className="md:hidden px-4 pt-4">
+        <div className="relative group">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input 
+            type="text" 
+            placeholder="Search works..." 
+            className="w-full bg-white border border-slate-200 py-3 pl-11 pr-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-500 transition-all shadow-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
 
       <main className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
         {/* DASHBOARD ADMINISTRATIVO COMPLETO */}
