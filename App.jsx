@@ -15,10 +15,10 @@ import { getFirestore, collection, doc, onSnapshot, addDoc, deleteDoc, query } f
 const COMPANY_NAME = "The GSI Group";
 const COMPANY_TAGLINE = "Signs & Visual Communication";
 const PRIMARY_COLOR = "#F36F21"; 
-const WHATSAPP_NUMBER = "14074885194"; // Updated official contact
+const WHATSAPP_NUMBER = "4074885194"; // Official contact
 const ADMIN_PASSWORD = "GSI_FLORIDA_2026"; 
 
-// Official categories list
+// Official categories list - Compact and responsive
 const CATEGORIES = [
   "All", 
   "Digital marketing", 
@@ -32,12 +32,23 @@ const CATEGORIES = [
   "Wall Graphics"
 ];
 
-// --- FIREBASE INITIALIZATION ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'the-gsi-group-final';
+// --- FIREBASE INITIALIZATION WITH FAIL-SAFE ---
+let db = null;
+let auth = null;
+let appId = 'the-gsi-group-final';
+
+try {
+  // Check if config exists to prevent ReferenceError on Vercel
+  if (typeof __firebase_config !== 'undefined') {
+    const firebaseConfig = JSON.parse(__firebase_config);
+    const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+    auth = getAuth(app);
+    db = getFirestore(app);
+    appId = typeof __app_id !== 'undefined' ? __app_id : 'the-gsi-group-final';
+  }
+} catch (e) {
+  console.warn("Firebase config not found. Running in demo mode.");
+}
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -72,6 +83,7 @@ export default function App() {
 
   // Auth Initialization (Rule 3)
   useEffect(() => {
+    if (!auth) return;
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -88,7 +100,7 @@ export default function App() {
 
   // Real-time Firestore Data Sync (Rule 1)
   useEffect(() => {
-    if (!user) return;
+    if (!db || !user) return;
     const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
     const unsubscribe = onSnapshot(productsRef, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -122,7 +134,7 @@ export default function App() {
 
   const handleAddProduct = async (e) => {
     e.preventDefault();
-    if (!user || !isAdminMode) return;
+    if (!db || !user || !isAdminMode) return;
     try {
       const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
       await addDoc(productsRef, { 
@@ -130,15 +142,16 @@ export default function App() {
         price: Number(newProduct.price),
         createdAt: new Date().toISOString()
       });
-      // Reset text but keep category
+      // Reset form but keep category for next upload
       setNewProduct({ ...newProduct, name: '', price: '', description: '', image: '' });
     } catch (err) { console.error("Save error:", err); }
   };
 
   const handleDeleteProduct = async (id) => {
-    if (!user || !isAdminMode) return;
+    if (!db || !user || !isAdminMode) return;
     try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
+      const productDoc = doc(db, 'artifacts', appId, 'public', 'data', 'products', id);
+      await deleteDoc(productDoc);
     } catch (err) { console.error("Delete error:", err); }
   };
 
@@ -169,6 +182,10 @@ export default function App() {
     } finally { setIsLoadingAi(false); }
   };
 
+  const openWhatsApp = () => {
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}`, '_blank');
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-orange-100">
       {/* Header */}
@@ -188,7 +205,7 @@ export default function App() {
             <LayoutDashboard className="w-5 h-5" />
           </button>
           <button 
-            onClick={() => window.open(`https://wa.me/1${WHATSAPP_NUMBER}`, '_blank')}
+            onClick={openWhatsApp}
             className="bg-slate-900 text-white px-5 py-2 sm:px-6 sm:py-2.5 rounded-2xl text-[12px] sm:text-sm font-bold shadow-lg hover:bg-black transition-all uppercase"
           >
             Contact
@@ -204,7 +221,7 @@ export default function App() {
               <h2 className="text-2xl font-bold mb-8 uppercase italic tracking-tighter text-orange-600 flex items-center gap-3"><PlusCircle /> Add New Project</h2>
               <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Title</label><input placeholder="Ford Van Wrap" className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 text-sm" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required /></div>
-                <div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Tab</label><select className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 cursor-pointer text-sm" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>{CATEGORIES.filter(c => c !== "All").map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                <div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Tab</label><select className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 appearance-none cursor-pointer text-sm" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>{CATEGORIES.filter(c => c !== "All").map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                 <div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Price ($)</label><input placeholder="2500" type="number" className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 text-sm" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required /></div>
                 <div className="md:col-span-3 space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Direct Link Link (.jpg)</label><input placeholder="Paste the Direct Link here" className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 text-sm" value={newProduct.image} onChange={e => setNewProduct({...newProduct, image: e.target.value})} required /></div>
                 <div className="md:col-span-3 space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 ml-1">Description</label><textarea placeholder="Project materials and quality..." className="w-full p-4 bg-slate-50 border rounded-2xl outline-orange-500 h-24 text-sm" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required /></div>
@@ -221,7 +238,9 @@ export default function App() {
         {!isAdminMode && (
           <div className="mb-10 bg-[#F36F21] rounded-[2.5rem] sm:rounded-[3.5rem] p-8 sm:p-14 text-white relative overflow-hidden flex flex-col md:flex-row items-center justify-between shadow-2xl border border-white/10">
             <div className="relative z-10 max-w-xl text-left">
-              <h2 className="text-4xl sm:text-6xl font-black mb-4 leading-none uppercase tracking-tighter">Stand Out <br/><span className="text-neutral-900 underline decoration-4 underline-offset-8">in Florida.</span></h2>
+              <h2 className="text-4xl sm:text-6xl font-black mb-4 leading-none uppercase tracking-tighter text-white">
+                Stand Out <br/><span className="text-neutral-900 underline decoration-4 underline-offset-8">in Florida.</span>
+              </h2>
               <p className="text-orange-50 mb-8 text-base sm:text-lg font-medium opacity-90 leading-relaxed max-w-md">The highest quality signage, vehicle wraps, and visual marketing for your brand.</p>
               <button onClick={() => setIsAiChatOpen(true)} className="bg-neutral-900 text-white px-8 py-4 rounded-2xl font-black flex items-center gap-3 hover:bg-black transition-all shadow-xl uppercase text-xs tracking-widest"><MessageSquare className="w-5 h-5" /> AI Consultant</button>
             </div>
@@ -235,7 +254,7 @@ export default function App() {
             <button
               key={cat}
               onClick={() => setFilter(cat)}
-              className={`px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all shadow-sm border ${
+              className={`px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-[9px] sm:text-[11px] font-black uppercase tracking-wider transition-all shadow-sm border ${
                 filter === cat 
                   ? "bg-slate-900 text-white border-slate-900 shadow-xl" 
                   : "bg-white text-slate-500 border-slate-200 hover:border-orange-500 hover:text-orange-600"
@@ -256,7 +275,7 @@ export default function App() {
               </div>
               <div className="flex-1 px-2 flex flex-col text-left">
                 <span className="text-[9px] font-black text-orange-600 uppercase tracking-widest mb-1">{product.category}</span>
-                <h3 className="font-bold text-slate-900 text-lg mb-3 group-hover:text-orange-600 leading-tight line-clamp-2">{product.name}</h3>
+                <h3 className="font-bold text-slate-900 text-lg mb-3 group-hover:text-orange-600 transition-colors leading-tight line-clamp-2">{product.name}</h3>
                 <div className="flex justify-between items-center mt-auto pt-5 border-t border-slate-50">
                   <div className="flex flex-col">
                     <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Starting</span>
@@ -300,7 +319,7 @@ export default function App() {
                 <div className="bg-slate-50 p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] mb-10 border border-slate-100 shadow-inner text-sm sm:text-base text-slate-600 leading-relaxed">{selectedProduct.description}</div>
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-8 pt-8 border-t border-slate-100 mt-auto">
                   <div className="text-center sm:text-left"><span className="text-[10px] text-slate-400 font-black uppercase tracking-widest block mb-1">Estimate Price</span><span className="text-3xl sm:text-4xl font-black text-slate-900">${Number(selectedProduct.price).toLocaleString()}</span></div>
-                  <button onClick={() => window.open(`https://wa.me/1${WHATSAPP_NUMBER}?text=Hi! I am interested in an estimate for ${selectedProduct.name} seen in your gallery.`)} className="w-full sm:w-auto bg-orange-600 text-white px-10 py-5 rounded-[1.8rem] sm:rounded-[2.2rem] font-black shadow-xl hover:bg-orange-700 active:scale-95 transition-all flex items-center justify-center gap-3 uppercase text-xs tracking-widest text-white">Get Quote <ExternalLink className="w-4 h-4" /></button>
+                  <button onClick={() => window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=Hi! I am interested in an estimate for ${selectedProduct.name} seen in your gallery.`)} className="w-full sm:w-auto bg-orange-600 text-white px-10 py-5 rounded-[1.8rem] sm:rounded-[2.2rem] font-black shadow-xl hover:bg-orange-700 active:scale-95 transition-all flex items-center justify-center gap-3 uppercase text-xs tracking-widest text-white">Get Quote <ExternalLink className="w-4 h-4" /></button>
                 </div>
               </div>
             </div>
@@ -333,7 +352,7 @@ export default function App() {
         </div>
       </div>
 
-      {!isAiChatOpen && <button onClick={() => setIsAiChatOpen(true)} className="fixed bottom-6 right-6 sm:bottom-10 sm:right-10 bg-orange-500 text-white p-5 sm:p-6 rounded-[2.2rem] sm:rounded-[2.5rem] shadow-2xl hover:scale-110 active:scale-95 transition-all z-40 group shadow-orange-500/40"><MessageSquare className="w-7 h-7 sm:w-8 sm:h-8" /></button>}
+      {!isAiChatOpen && <button onClick={() => setIsAiChatOpen(true)} className="fixed bottom-6 right-6 sm:bottom-10 sm:right-10 bg-orange-500 text-white p-5 sm:p-6 rounded-[2.2rem] sm:rounded-[2.5rem] shadow-2xl hover:scale-110 active:scale-95 transition-all z-40 group shadow-orange-500/40"><MessageSquare className="w-8 h-8" /></button>}
       
       <footer className="bg-slate-900 text-white py-24 mt-20 text-center border-t border-white/5 px-4"><h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tighter leading-none mb-4">THE <span className="text-orange-500">GSI</span> GROUP</h2><p className="text-slate-500 text-[10px] uppercase tracking-[0.4em] mb-4">Signs & Visual Communication • (407) 488-5194</p><p className="text-slate-600 text-[8px] uppercase tracking-[0.3em]">© 2026 THE GSI GROUP • FLORIDA • USA</p></footer>
     </div>
