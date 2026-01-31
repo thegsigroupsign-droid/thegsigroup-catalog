@@ -27,14 +27,14 @@ const VERCEL_FIREBASE_CONFIG = {
 // --- CONFIGURAÇÕES PADRÃO ---
 const DEFAULT_SETTINGS = {
   companyName: "The GSI Group",
-  tagline: "Signs & Visual Communication",
+  tagline: "Signs Print Digital Marketing",
   primaryColor: "#F36F21",
   whatsapp: "14074885194",
   email: "designer@thegsigroup.com",
   address: "3344 S. Orange Blossom TRL, Kissimmee, FL 34746",
   logoUrl: "",
   copyright: "The GSI Group LLC",
-  badgeText: "FLORIDA ELITE" 
+  badgeText: "ORLANDO ELITE" 
 };
 
 const ADMIN_PASSWORD = "GSI_FLORIDA_2026"; 
@@ -671,7 +671,7 @@ export default function App() {
         </div>
 
         <p className="text-slate-600 text-[8px] sm:text-[10px] uppercase tracking-[0.3em] font-bold">
-          © {new Date().getFullYear()} {siteSettings.copyright} • ALL RIGHTS RESERVED • FLORIDA • USA
+          © {new Date().getFullYear()} {siteSettings.copyright} • ALL RIGHTS RESERVED • Orlando • USA
         </p>
       </footer>
     </div>
