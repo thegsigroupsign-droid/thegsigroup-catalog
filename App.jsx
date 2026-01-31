@@ -5,13 +5,13 @@ import {
   ExternalLink, PenTool, Layers, Printer, Truck, Maximize,
   LayoutDashboard, PlusCircle, Lock, ShieldCheck, AlertCircle, CheckCircle2,
   ArrowUpDown, Share2, BarChart3, TrendingUp, ChevronDown, MapPin, Mail, Phone, Globe,
-  Command, Award
+  Command, Award, Pencil
 } from 'lucide-react';
 
 // Importações do Firebase
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, doc, onSnapshot, addDoc, deleteDoc, setDoc, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, doc, onSnapshot, addDoc, deleteDoc, setDoc, updateDoc } from 'firebase/firestore';
 
 // --- ✅ CONFIGURAÇÃO VERCEL ---
 const VERCEL_FIREBASE_CONFIG = {
@@ -34,7 +34,7 @@ const DEFAULT_SETTINGS = {
   address: "3344 S. Orange Blossom TRL, Kissimmee, FL 34746",
   logoUrl: "",
   copyright: "The GSI Group LLC",
-  badgeText: "FLORIDA ELITE" // Novo campo para o selo nas imagens
+  badgeText: "FLORIDA ELITE" 
 };
 
 const ADMIN_PASSWORD = "GSI_FLORIDA_2026"; 
@@ -80,6 +80,7 @@ export default function App() {
 
   // Estados de Edição
   const [editSettings, setEditSettings] = useState(DEFAULT_SETTINGS);
+  const [editingId, setEditingId] = useState(null); // ID do produto que está sendo editado
   const [newProduct, setNewProduct] = useState({ name: '', category: 'Digital marketing', price: '', description: '', image: '' });
   
   // AI Chat State
@@ -183,13 +184,48 @@ export default function App() {
     if (!db || isSaving) return;
     setIsSaving(true);
     try {
-      const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
-      await addDoc(productsRef, { ...newProduct, price: Number(newProduct.price), createdAt: new Date().toISOString() });
-      setStatusMsg({ type: 'success', text: 'Work added to catalog!' });
+      if (editingId) {
+        // Lógica de Atualização
+        const productRef = doc(db, 'artifacts', appId, 'public', 'data', 'products', editingId);
+        await updateDoc(productRef, { 
+          ...newProduct, 
+          price: Number(newProduct.price),
+          updatedAt: new Date().toISOString() 
+        });
+        setStatusMsg({ type: 'success', text: 'Work updated successfully!' });
+        setEditingId(null);
+      } else {
+        // Lógica de Novo Produto
+        const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
+        await addDoc(productsRef, { 
+          ...newProduct, 
+          price: Number(newProduct.price), 
+          createdAt: new Date().toISOString() 
+        });
+        setStatusMsg({ type: 'success', text: 'Work added to catalog!' });
+      }
       setNewProduct({ ...newProduct, name: '', category: 'Digital marketing', price: '', description: '', image: '' });
       setTimeout(() => setStatusMsg({ type: '', text: '' }), 4000);
-    } catch (err) { setStatusMsg({ type: 'error', text: 'Save failed.' }); } 
+    } catch (err) { setStatusMsg({ type: 'error', text: 'Operation failed.' }); } 
     finally { setIsSaving(false); }
+  };
+
+  const handleEditClick = (product) => {
+    setEditingId(product.id);
+    setNewProduct({
+      name: product.name,
+      category: product.category,
+      price: product.price,
+      description: product.description,
+      image: product.image
+    });
+    // Scroll suave para o formulário
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setNewProduct({ name: '', category: 'Digital marketing', price: '', description: '', image: '' });
   };
 
   const handleSaveSettings = async (e) => {
@@ -208,7 +244,10 @@ export default function App() {
   const handleDeleteProduct = async (id) => {
     if (!db || !isAdminMode) return;
     if (confirm("Delete this work from catalog?")) {
-      try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id)); } catch (e) { }
+      try { 
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id)); 
+        if (editingId === id) cancelEdit();
+      } catch (e) { }
     }
   };
 
@@ -311,7 +350,7 @@ export default function App() {
       </header>
 
       {/* MOBILE SEARCH BAR */}
-      <div className="md:hidden px-4 pt-4">
+      <div className="md:hidden px-4 pt-4 text-left">
         <div className="relative group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input 
@@ -371,18 +410,37 @@ export default function App() {
               </form>
             </div>
 
-            {/* Adicionar Trabalho */}
-            <div className="bg-white border-2 border-orange-100 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 shadow-2xl relative">
-              <h2 className="text-lg sm:text-xl font-black italic uppercase tracking-tighter text-orange-600 mb-8 flex items-center gap-2 text-left"><PlusCircle className="w-5 h-5" /> Publish New Work</h2>
+            {/* Adicionar / Editar Trabalho */}
+            <div className={`bg-white border-2 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 shadow-2xl relative transition-all duration-500 ${editingId ? 'border-blue-500' : 'border-orange-100'}`}>
+              <h2 className={`text-lg sm:text-xl font-black italic uppercase tracking-tighter mb-8 flex items-center gap-2 text-left ${editingId ? 'text-blue-600' : 'text-orange-600'}`}>
+                {editingId ? <><Pencil className="w-5 h-5" /> Edit Existing Work</> : <><PlusCircle className="w-5 h-5" /> Publish New Work</>}
+              </h2>
+              
+              {statusMsg.text && (
+                <div className={`mb-6 p-4 rounded-xl flex items-center gap-3 font-bold text-xs animate-in fade-in ${statusMsg.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                  <AlertCircle className="w-4 h-4" />{statusMsg.text}
+                </div>
+              )}
+
               <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <input placeholder="Project Title" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
+                <input placeholder="Project Title" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-blue-200" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
                 <select className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none cursor-pointer" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
                   {CATEGORIES.filter(c => c !== "All").map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <input placeholder="Starting Price ($)" type="number" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
                 <input placeholder="Image Link" className="md:col-span-3 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={newProduct.image} onChange={e => setNewProduct({...newProduct, image: e.target.value})} required />
                 <textarea placeholder="Description..." className="md:col-span-3 p-4 bg-slate-50 border border-slate-100 rounded-2xl h-24 text-sm outline-none" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
-                <button type="submit" disabled={isSaving} className="md:col-span-3 bg-slate-900 text-white font-black py-4 rounded-[1.5rem] shadow-xl uppercase active:scale-95 transition-all text-xs tracking-widest">{isSaving ? "Syncing..." : "Add to Live Catalog"}</button>
+                
+                <div className="md:col-span-3 flex gap-3">
+                  <button type="submit" disabled={isSaving} className={`flex-1 py-4 rounded-[1.5rem] font-black uppercase text-xs tracking-widest transition-all shadow-xl ${editingId ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-slate-900 text-white hover:bg-slate-800'}`}>
+                    {isSaving ? "Processing..." : editingId ? "Save Changes" : "Add to Live Catalog"}
+                  </button>
+                  {editingId && (
+                    <button type="button" onClick={cancelEdit} className="px-8 py-4 bg-slate-100 text-slate-500 rounded-[1.5rem] font-black uppercase text-xs tracking-widest hover:bg-slate-200">
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </form>
             </div>
             
@@ -392,11 +450,16 @@ export default function App() {
                 <table className="w-full text-xs sm:text-sm">
                   <tbody className="divide-y divide-slate-100">
                     {products.map(p => (
-                      <tr key={p.id} className="group hover:bg-slate-50">
+                      <tr key={p.id} className={`group transition-colors ${editingId === p.id ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
                         <td className="py-4 px-2 font-bold text-left">{p.name}</td>
                         <td className="py-4 px-2 text-[10px] text-slate-400 uppercase hidden sm:table-cell text-left">{p.category}</td>
-                        <td className="py-4 px-2 text-right">
-                          <button onClick={() => handleDeleteProduct(p.id)} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                        <td className="py-4 px-2 text-right flex justify-end gap-2">
+                          <button onClick={() => handleEditClick(p)} title="Edit Work" className="text-slate-400 hover:text-blue-500 p-2 transition-colors bg-slate-50 rounded-xl">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleDeleteProduct(p.id)} title="Delete Work" className="text-slate-300 hover:text-red-500 p-2 transition-colors bg-slate-50 rounded-xl">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -489,7 +552,7 @@ export default function App() {
       {/* LOGIN ADMIN */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl animate-in fade-in">
-          <div className="bg-white rounded-[2rem] sm:rounded-[3rem] p-8 sm:p-10 max-w-sm w-full shadow-2xl text-center space-y-6">
+          <div className="bg-white rounded-[2rem] sm:rounded-[3rem] p-8 sm:p-10 max-sm:w-full shadow-2xl text-center space-y-6">
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto shadow-inner"><Lock className="w-8 h-8 sm:w-10 sm:h-10" /></div>
             <h2 className="text-xl sm:text-2xl font-black italic uppercase text-slate-900 tracking-tighter text-left">Admin Access</h2>
             <form onSubmit={handlePasswordSubmit} className="space-y-4">
@@ -535,7 +598,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 🤖 ROBOT CHAT INTERATIVO (REDIRECIONAMENTO WHATSAPP) */}
+      {/* 🤖 ROBOT CHAT INTERATIVO */}
       <div className={`fixed inset-0 sm:inset-auto sm:bottom-8 sm:right-8 z-50 transition-all transform ${isAiChatOpen ? 'scale-100 translate-y-0' : 'scale-0 translate-y-20 pointer-events-none'}`}>
         <div className="bg-white h-full sm:h-[680px] sm:rounded-[3rem] shadow-2xl w-full sm:w-[420px] flex flex-col border border-slate-100 overflow-hidden text-slate-900 text-left">
           <div className="bg-slate-900 p-6 sm:p-8 text-white flex justify-between items-center relative overflow-hidden shrink-0">
@@ -608,7 +671,7 @@ export default function App() {
         </div>
 
         <p className="text-slate-600 text-[8px] sm:text-[10px] uppercase tracking-[0.3em] font-bold">
-          © {new Date().getFullYear()} {siteSettings.copyright} • ALL RIGHTS RESERVED • Orlando • USA
+          © {new Date().getFullYear()} {siteSettings.copyright} • ALL RIGHTS RESERVED • FLORIDA • USA
         </p>
       </footer>
     </div>
