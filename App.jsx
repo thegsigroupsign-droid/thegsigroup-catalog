@@ -73,7 +73,7 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [currentProductImgIdx, setCurrentProductImgIdx] = useState(0); 
-  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
   const [isAdminMode, setIsAdminMode] = useState(false);
@@ -93,8 +93,6 @@ export default function App() {
   const [newBanner, setNewBanner] = useState({ title: '', subtitle: '', image: '', active: true });
   const [newVideo, setNewVideo] = useState({ title: '', youtubeUrl: '', gallery: 'General' });
   
-  // AI Chat State
-  const [aiMessages, setAiMessages] = useState([]);
   const [isMobileCategoryMenuOpen, setIsMobileCategoryMenuOpen] = useState(false);
 
   // Keyboard shortcut (/)
@@ -169,26 +167,13 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // --- ✅ CHAT REDIRECT LOGIC ---
-  const openAiChat = () => {
-    setAiMessages([{
-      role: 'assistant',
-      text: `Welcome to ${siteSettings.companyName}! 🇺🇸\nWe're here to make your brand shine. Redirecting you to our team on WhatsApp for a personalized project consultation...`
-    }]);
-    setIsAiChatOpen(true);
+  // --- ✅ NEW ASSISTANT LOGIC (REPLACING AUTO-REDIRECT) ---
+  const handleAssistantOption = (service) => {
+    const cleanPhone = siteSettings.whatsapp.replace(/\D/g, '');
+    const message = encodeURIComponent(`Hi GSI Group! I'm interested in a ${service} project. Can you help me?`);
+    window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
+    setIsAssistantOpen(false);
   };
-
-  useEffect(() => {
-    if (isAiChatOpen) {
-      const timer = setTimeout(() => {
-        const cleanPhone = siteSettings.whatsapp.replace(/\D/g, '');
-        window.open(`https://wa.me/${cleanPhone}?text=Hi! I would like to start a project with GSI Group.`, '_blank');
-        setIsAiChatOpen(false);
-        setAiMessages([]); 
-      }, 2500);
-      return () => clearTimeout(timer);
-    }
-  }, [isAiChatOpen, siteSettings.whatsapp]);
 
   // Admin Handlers
   const handleAddVideo = async (e) => {
@@ -393,9 +378,9 @@ export default function App() {
               </div>
             </div>
 
-            {/* --- ✅ RESTORED: GLOBAL SETTINGS FORM --- */}
+            {/* Global Settings Admin */}
             <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-100">
-               <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900 uppercase italic tracking-tighter"><Settings className="w-5 h-5" /> Site Branding & Footer Control</h2>
+               <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900 uppercase italic tracking-tighter"><Settings className="w-5 h-5" /> Global Site Settings</h2>
               <form onSubmit={handleSaveSettings} className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Company Name</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.companyName} onChange={e => setEditSettings({...editSettings, companyName: e.target.value})} /></div>
                 <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Tagline (Footer)</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.tagline} onChange={e => setEditSettings({...editSettings, tagline: e.target.value})} /></div>
@@ -405,7 +390,7 @@ export default function App() {
                 <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Badge Text (Quality Stamp)</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.badgeText} onChange={e => setEditSettings({...editSettings, badgeText: e.target.value})} /></div>
                 <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Logo URL (.png/.jpg)</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.logoUrl} onChange={e => setEditSettings({...editSettings, logoUrl: e.target.value})} /></div>
                 <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Copyright Statement</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.copyright} onChange={e => setEditSettings({...editSettings, copyright: e.target.value})} /></div>
-                <button type="submit" disabled={isSaving} className="md:col-span-2 bg-slate-900 text-white p-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-black transition-all shadow-xl">Save Global Settings</button>
+                <button type="submit" disabled={isSaving} className="md:col-span-2 bg-slate-900 text-white p-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-black transition-all shadow-xl">Save All Global Settings</button>
               </form>
             </div>
 
@@ -429,10 +414,31 @@ export default function App() {
                 <button type="submit" disabled={isSaving} className={`w-full py-4 rounded-[1.5rem] font-black uppercase text-xs text-white shadow-xl transition-all ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-900 hover:bg-black'}`}>Save to Portfolio</button>
               </form>
             </div>
+            
+            {/* Inventory List Admin */}
+            <div className="bg-white rounded-[2rem] p-6 text-slate-900 border border-slate-200 overflow-hidden shadow-sm">
+              <h3 className="text-lg font-bold mb-6 italic uppercase flex items-center gap-2 text-slate-400"><Layers className="w-5 h-5"/> Live Inventory Control</h3>
+              <div className="max-h-[400px] overflow-y-auto no-scrollbar">
+                <table className="w-full text-xs sm:text-sm">
+                  <tbody className="divide-y divide-slate-100">
+                    {products.map(p => (
+                      <tr key={p.id} className="group hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-2 font-bold text-left">{p.name}</td>
+                        <td className="py-4 px-2 text-[10px] text-slate-400 uppercase hidden sm:table-cell text-left">{p.category}</td>
+                        <td className="py-4 px-2 text-right flex justify-end gap-2">
+                          <button onClick={() => handleEditClick(p)} className="text-slate-400 hover:text-blue-500 p-2 transition-colors bg-slate-50 rounded-xl"><Pencil size={14} /></button>
+                          <button onClick={() => handleDeleteProduct(p.id)} className="text-slate-300 hover:text-red-500 p-2 transition-colors bg-slate-50 rounded-xl"><Trash2 size={14} /></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* HERO SLIDESHOW (Responsive 300px mobile / 550px desktop) */}
+        {/* HERO SLIDESHOW */}
         {!isAdminMode && (
           <div className="mb-10 relative h-[300px] sm:h-[550px] rounded-[2rem] sm:rounded-[3.5rem] overflow-hidden shadow-2xl">
             {banners.map((slide, index) => (
@@ -444,7 +450,7 @@ export default function App() {
                   </div>
                   <h2 className="text-2xl sm:text-7xl font-black mb-4 uppercase leading-[1] tracking-tighter"> {slide.title} </h2>
                   <p className="text-white/90 mb-6 text-xs sm:text-xl font-medium max-w-md">{slide.subtitle}</p>
-                  <button onClick={openAiChat} className="bg-white text-slate-900 px-6 sm:px-10 py-3 sm:py-4 rounded-full font-black uppercase text-[10px] sm:text-xs shadow-xl hover:scale-105 transition-all">Start Project</button>
+                  <button onClick={() => setIsAssistantOpen(true)} className="bg-white text-slate-900 px-6 sm:px-10 py-3 sm:py-4 rounded-full font-black uppercase text-[10px] sm:text-xs shadow-xl hover:scale-105 transition-all">Start Project</button>
                 </div>
               </div>
             ))}
@@ -453,14 +459,14 @@ export default function App() {
 
         {/* VIDEOS */}
         {!isAdminMode && videos.length > 0 && filter === "All" && (
-          <div className="mb-16 text-left">
+          <div className="mb-16 text-left animate-in fade-in">
             <h2 className="text-2xl font-black italic uppercase mb-8 flex items-center gap-3"><PlayCircle className="text-red-600" /> Video Portfolio</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {videos.map(v => (
-                <div key={v.id} className="bg-white rounded-[2rem] p-4 shadow-sm border border-slate-100">
+                <div key={v.id} className="bg-white rounded-[2rem] p-4 shadow-sm border border-slate-100 transition-all hover:shadow-xl">
                   <div className="aspect-video rounded-2xl overflow-hidden mb-4 bg-slate-900 shadow-inner"><iframe className="w-full h-full" src={`https://www.youtube.com/embed/${v.videoId}`} title={v.title} frameBorder="0" allowFullScreen></iframe></div>
                   <span className="text-[8px] font-black text-red-600 uppercase mb-1 block">{v.gallery || 'General'}</span>
-                  <h3 className="font-bold text-slate-800 uppercase truncate">{v.title}</h3>
+                  <h3 className="font-bold text-slate-800 uppercase truncate tracking-tighter">{v.title}</h3>
                 </div>
               ))}
             </div>
@@ -478,7 +484,7 @@ export default function App() {
               <ChevronDown className={`w-5 h-5 transition-transform ${isMobileCategoryMenuOpen ? 'rotate-180' : ''}`} />
             </button>
             {isMobileCategoryMenuOpen && (
-              <div className="absolute top-full left-0 right-0 mt-3 bg-white border border-slate-100 rounded-[1.5rem] shadow-2xl z-50 py-3">
+              <div className="absolute top-full left-0 right-0 mt-3 bg-white border border-slate-100 rounded-[1.5rem] shadow-2xl z-50 py-3 animate-in slide-in-from-top-4">
                 {CATEGORIES.map(cat => <button key={cat} onClick={() => { setFilter(cat); setIsMobileCategoryMenuOpen(false); }} className={`w-full text-left px-6 py-4 text-[11px] font-black uppercase ${filter === cat ? 'bg-orange-50 text-orange-600' : 'text-slate-500'}`}>{cat}</button>)}
               </div>
             )}
@@ -494,7 +500,7 @@ export default function App() {
                 <div className="absolute top-4 left-4 bg-orange-600 text-white text-[8px] font-black px-3 py-1.5 rounded-lg shadow-lg uppercase">{siteSettings?.badgeText}</div>
                 <button onClick={() => handleShare(product)} className="absolute top-4 right-4 bg-white/20 backdrop-blur-md text-white p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-all"><Share2 size={16} /></button>
               </div>
-              <h3 className="font-bold text-slate-900 text-lg mb-4 uppercase line-clamp-1 tracking-tighter">{product.name}</h3>
+              <h3 className="font-bold text-slate-900 text-lg mb-4 uppercase line-clamp-1 tracking-tighter leading-tight">{product.name}</h3>
               <div className="flex justify-between items-center mt-auto pt-5 border-t border-slate-50">
                 <div className="flex flex-col"><span className="text-[9px] text-slate-400 font-bold uppercase leading-none">Starting at</span><span className="text-xl font-black text-slate-900">${Number(product.price).toLocaleString()}</span></div>
                 <button onClick={() => { setSelectedProduct(product); setCurrentProductImgIdx(0); }} className="bg-slate-900 text-white p-3 rounded-xl hover:bg-orange-600 shadow-md"><Maximize size={18} /></button>
@@ -504,15 +510,15 @@ export default function App() {
         </div>
       </main>
 
-      {/* FOOTER (Fully Dynamic) */}
+      {/* FOOTER (Dynamically Adjusted) */}
       <footer className="bg-slate-900 text-white py-16 px-4 text-center mt-20 border-t border-white/5">
         <h2 className="text-2xl font-black uppercase mb-4 tracking-tighter italic">THE <span style={{ color: siteSettings?.primaryColor }}>GSI</span> GROUP</h2>
         <p className="text-slate-400 text-[10px] uppercase tracking-[0.4em] mb-10 italic font-medium">{siteSettings?.tagline}</p>
         
-        <div className="flex flex-col sm:flex-row justify-center gap-8 text-[10px] font-black uppercase text-slate-500 mb-12">
+        <div className="flex flex-col sm:flex-row justify-center gap-8 text-[10px] font-black uppercase text-slate-500 mb-12 text-left sm:text-center">
           <div className="flex items-center justify-center gap-2"><MapPin size={14} className="text-orange-500 shrink-0" /> {siteSettings?.address}</div>
           <div className="flex items-center justify-center gap-2"><Mail size={14} className="text-orange-500 shrink-0" /> {siteSettings?.email}</div>
-          <div className="flex items-center justify-center gap-2"><Phone size={14} className="text-orange-500 shrink-0" /> +1 ({siteSettings?.whatsapp.substring(1,4)}) {siteSettings?.whatsapp.substring(4,7)}-{siteSettings?.whatsapp.substring(7)}</div>
+          <div className="flex items-center justify-center gap-2"><Phone size={14} className="text-orange-500 shrink-0" /> +1 ({siteSettings?.whatsapp.substring(0,3)}) {siteSettings?.whatsapp.substring(3,6)}-{siteSettings?.whatsapp.substring(6)}</div>
         </div>
 
         <p className="text-slate-600 text-[9px] uppercase tracking-[0.3em] font-bold">
@@ -534,10 +540,10 @@ export default function App() {
         </div>
       )}
 
-      {/* PRODUCT DETAILS MODAL (Improved Responsiveness) */}
+      {/* PRODUCT DETAILS MODAL */}
       {selectedProduct && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/90 backdrop-blur-md p-2 sm:p-6 overflow-y-auto">
-          <div className="bg-white rounded-[2.5rem] max-w-6xl w-full flex flex-col lg:flex-row overflow-hidden shadow-2xl my-auto animate-in zoom-in duration-300 max-h-[95vh]">
+          <div className="bg-white rounded-none sm:rounded-[3.5rem] max-w-6xl w-full flex flex-col lg:flex-row overflow-hidden shadow-2xl my-auto animate-in zoom-in duration-300 max-h-[95vh]">
             <div className="lg:w-3/5 h-[300px] sm:h-[500px] lg:h-auto relative bg-black shrink-0 group">
               <div className="w-full h-full flex transition-transform duration-500 ease-out" style={{ transform: `translateX(-${currentProductImgIdx * 100}%)` }}>
                 {(selectedProduct.images || [selectedProduct.image]).map((img, i) => (
@@ -568,7 +574,7 @@ export default function App() {
               <div className="flex items-center justify-between gap-6 pt-6 border-t border-slate-100 mt-auto">
                 <div className="text-left">
                   <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest block mb-1">Starting at</span>
-                  <span className="text-4xl font-black text-slate-900">${Number(selectedProduct.price).toLocaleString()}</span>
+                  <span className="text-4xl font-black text-slate-900 leading-none">${Number(selectedProduct.price).toLocaleString()}</span>
                 </div>
                 <button onClick={() => window.open(`https://wa.me/${siteSettings?.whatsapp.replace(/\D/g, '')}?text=Saw ${selectedProduct.name} and want a quote.`)} className="flex-1 bg-orange-600 text-white py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl flex items-center justify-center gap-3 hover:bg-orange-700 transition-all">Request Quote <ExternalLink size={18} /></button>
               </div>
@@ -577,33 +583,45 @@ export default function App() {
         </div>
       )}
 
-      {/* --- ✅ CHAT REDIRECT MODAL --- */}
-      <div className={`fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm transition-all transform ${isAiChatOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'}`}>
+      {/* --- ✅ NEW: INTERACTIVE ASSISTANT MODAL --- */}
+      <div className={`fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm transition-all transform ${isAssistantOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'}`}>
         <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-[420px] overflow-hidden text-left animate-in zoom-in-95">
           <div className="bg-slate-900 p-8 text-white flex justify-between items-center relative">
             <div className="flex items-center gap-4 relative z-10">
               <div className="w-14 h-14 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg"><MessageSquare size={28} /></div>
-              <div className="leading-tight"><h4 className="font-black uppercase tracking-tight text-white">GSI Assistant</h4><p className="text-[10px] text-orange-400 font-bold uppercase tracking-widest">Instant Redirect</p></div>
+              <div className="leading-tight"><h4 className="font-black uppercase tracking-tight text-white">GSI Assistant</h4><p className="text-[10px] text-orange-400 font-bold uppercase tracking-widest">How can we help?</p></div>
             </div>
-            <button onClick={() => setIsAiChatOpen(false)} className="relative z-10 text-white/40 hover:text-white transition-colors"><X size={28} /></button>
+            <button onClick={() => setIsAssistantOpen(false)} className="relative z-10 text-white/40 hover:text-white transition-colors"><X size={28} /></button>
             <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/20 rounded-full blur-3xl"></div>
           </div>
-          <div className="p-10 space-y-6 bg-white text-center">
-            {aiMessages.map((msg, i) => (
-              <div key={i} className="text-slate-700 text-sm sm:text-lg leading-relaxed font-medium">
-                {msg.text.split('\n').map((line, j) => <p key={j}>{line}</p>)}
-              </div>
+          <div className="p-8 space-y-3 bg-white">
+            <p className="text-slate-700 font-bold text-center mb-6 text-sm">Welcome! Please choose what you are looking for to start a conversation on WhatsApp:</p>
+            
+            {[
+              "Car Wraps & Graphics",
+              "Business Signage",
+              "Graphic Design Inquiry",
+              "Custom TDF Awards",
+              "Digital Marketing",
+              "Other / General Question"
+            ].map((option) => (
+              <button 
+                key={option}
+                onClick={() => handleAssistantOption(option)}
+                className="w-full flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-orange-500 hover:bg-orange-50 transition-all text-sm font-black uppercase text-slate-600 group"
+              >
+                {option}
+                <ChevronRight className="text-orange-500 group-hover:translate-x-1 transition-transform" size={18} />
+              </button>
             ))}
-            <div className="pt-4 flex flex-col items-center gap-4">
-              <Loader2 className="animate-spin text-orange-500" size={40} />
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Launching WhatsApp...</p>
-            </div>
+            
+            <p className="text-[9px] text-slate-400 text-center mt-6 font-bold uppercase tracking-widest">We typically reply in under 1 hour.</p>
           </div>
         </div>
       </div>
       
-      {!isAiChatOpen && (
-        <button onClick={openAiChat} className="fixed bottom-6 right-6 sm:bottom-10 sm:right-10 bg-orange-500 text-white p-5 sm:p-6 rounded-[2.2rem] shadow-[0_20px_50px_rgba(243,111,33,0.4)] hover:scale-110 active:scale-95 transition-all z-40 border-4 border-white">
+      {!isAssistantOpen && (
+        <button onClick={() => setIsAssistantOpen(true)} className="fixed bottom-6 right-6 sm:bottom-10 sm:right-10 bg-orange-500 text-white p-5 sm:p-6 rounded-[2.2rem] shadow-[0_20px_50px_rgba(243,111,33,0.4)] hover:scale-110 active:scale-95 transition-all z-40 border-4 border-white">
           <MessageSquare size={32} />
         </button>
       )}
