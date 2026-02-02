@@ -5,7 +5,7 @@ import {
   ExternalLink, PenTool, Layers, Printer, Truck, Maximize,
   LayoutDashboard, PlusCircle, Lock, ShieldCheck, AlertCircle, CheckCircle2,
   ArrowUpDown, Share2, BarChart3, TrendingUp, ChevronDown, MapPin, Mail, Phone, Globe,
-  Command, Award, Pencil, PlayCircle, Youtube, ChevronLeft
+  Command, Award, Pencil, PlayCircle, Youtube, ChevronLeft, Loader2
 } from 'lucide-react';
 
 // Importações do Firebase
@@ -103,35 +103,43 @@ export default function App() {
     if (!db || !user) return;
     
     // Produtos
-    const unsubProducts = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'products'), (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    const unsubProducts = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'products'), 
+      (snapshot) => setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))),
+      (err) => console.error("Products Sync Error", err)
+    );
 
     // Banners
-    const unsubBanners = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'banners'), (snapshot) => {
-      const bData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setBanners(bData.length > 0 ? bData : [{ 
-        id: 'default', 
-        title: 'Make Your Brand Glow.', 
-        subtitle: 'The most advanced vehicle wraps and visual signage in Florida.', 
-        image: '', 
-        isDefault: true 
-      }]);
-    });
+    const unsubBanners = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'banners'), 
+      (snapshot) => {
+        const bData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setBanners(bData.length > 0 ? bData : [{ 
+          id: 'default', 
+          title: 'Make Your Brand Glow.', 
+          subtitle: 'The most advanced vehicle wraps and visual signage in Florida.', 
+          image: '', 
+          isDefault: true 
+        }]);
+      },
+      (err) => console.error("Banners Sync Error", err)
+    );
 
     // Vídeos
-    const unsubVideos = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'videos'), (snapshot) => {
-      setVideos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    const unsubVideos = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'videos'), 
+      (snapshot) => setVideos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))),
+      (err) => console.error("Videos Sync Error", err)
+    );
 
     // Settings
-    const unsubSettings = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setSiteSettings(data);
-        setEditSettings(data);
-      }
-    });
+    const unsubSettings = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), 
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setSiteSettings(data);
+          setEditSettings(data);
+        }
+      },
+      (err) => console.error("Settings Sync Error", err)
+    );
 
     return () => { unsubProducts(); unsubBanners(); unsubVideos(); unsubSettings(); };
   }, [user]);
@@ -145,7 +153,7 @@ export default function App() {
     return () => clearInterval(timer);
   }, [banners]);
 
-  // Auth (Simplificado)
+  // Auth
   useEffect(() => {
     if (!auth) return;
     const initAuth = async () => {
@@ -163,7 +171,10 @@ export default function App() {
   // Handlers Admin
   const handleAddBanner = async (e) => {
     e.preventDefault();
-    if (!db || isSaving || !user) return;
+    if (!db || isSaving || !user) {
+      setStatusMsg({ type: 'error', text: 'Waiting for authentication...' });
+      return;
+    }
     setIsSaving(true);
     try {
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'banners'), { 
@@ -185,24 +196,40 @@ export default function App() {
 
   const handleAddVideo = async (e) => {
     e.preventDefault();
-    if (!db || isSaving || !user) return;
+    if (!db || isSaving || !user) {
+      setStatusMsg({ type: 'error', text: 'Waiting for authentication. Try again in a second.' });
+      return;
+    }
+    
     setIsSaving(true);
     try {
+      // Extrair ID do vídeo de várias formas de URL do Youtube
       const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
       const match = newVideo.youtubeUrl.match(regExp);
       const videoId = (match && match[2] && match[2].length === 11) ? match[2] : null;
 
-      if (!videoId) throw new Error("Invalid URL");
+      if (!videoId) {
+        throw new Error("Invalid YouTube URL. Please use a link like https://www.youtube.com/watch?v=...");
+      }
 
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'videos'), { 
-        ...newVideo, 
-        videoId,
-        createdAt: new Date().toISOString() 
-      });
+      const videoData = {
+        title: newVideo.title.trim(),
+        youtubeUrl: newVideo.youtubeUrl.trim(),
+        gallery: newVideo.gallery,
+        videoId: videoId,
+        createdAt: new Date().toISOString()
+      };
+
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'videos'), videoData);
+      
       setNewVideo({ title: '', youtubeUrl: '', gallery: 'General' });
-      setStatusMsg({ type: 'success', text: 'Video added successfully to ' + newVideo.gallery });
-    } catch (e) { setStatusMsg({ type: 'error', text: 'Invalid YouTube URL or Error saving.' }); }
-    finally { setIsSaving(false); setTimeout(() => setStatusMsg({ type: '', text: '' }), 3000); }
+      setStatusMsg({ type: 'success', text: `Video added to ${videoData.gallery} gallery!` });
+    } catch (err) { 
+      setStatusMsg({ type: 'error', text: err.message || 'Error saving video to database.' }); 
+    } finally { 
+      setIsSaving(false); 
+      setTimeout(() => setStatusMsg({ type: '', text: '' }), 4000); 
+    }
   };
 
   const handleDeleteVideo = async (id) => {
@@ -360,40 +387,66 @@ export default function App() {
         {isAdminMode && (
           <div className="mb-12 space-y-8 animate-in slide-in-from-top-6 duration-700 text-left">
             
-            {/* Secção de Vídeos (CORRIGIDA) */}
+            {/* Status Feedback */}
+            {statusMsg.text && (
+              <div className={`p-5 rounded-[1.5rem] flex items-center gap-3 font-bold text-sm shadow-lg animate-in slide-in-from-right-4 ${statusMsg.type === 'error' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}>
+                {statusMsg.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
+                {statusMsg.text}
+              </div>
+            )}
+
+            {/* Secção de Vídeos */}
             <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-100">
                <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-red-600 uppercase italic tracking-tighter">
                 <Youtube className="w-5 h-5" /> Video Gallery Control
               </h2>
               <form onSubmit={handleAddVideo} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <input 
-                  placeholder="Video Title" 
-                  className="p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100" 
-                  value={newVideo.title} 
-                  onChange={e => setNewVideo({...newVideo, title: e.target.value})} 
-                  required 
-                />
-                <select 
-                  className="p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100 cursor-pointer" 
-                  value={newVideo.gallery} 
-                  onChange={e => setNewVideo({...newVideo, gallery: e.target.value})}
+                <div className="space-y-1">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase ml-2">Video Title</p>
+                  <input 
+                    placeholder="Ex: Customer Testimonial 1" 
+                    className="w-full p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100" 
+                    value={newVideo.title} 
+                    onChange={e => setNewVideo({...newVideo, title: e.target.value})} 
+                    required 
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase ml-2">Select Gallery</p>
+                  <select 
+                    className="w-full p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100 cursor-pointer" 
+                    value={newVideo.gallery} 
+                    onChange={e => setNewVideo({...newVideo, gallery: e.target.value})}
+                  >
+                    {VIDEO_GALLERIES.map(gal => <option key={gal} value={gal}>{gal}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase ml-2">YouTube Link</p>
+                  <input 
+                    placeholder="https://youtu.be/..." 
+                    className="w-full p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100" 
+                    value={newVideo.youtubeUrl} 
+                    onChange={e => setNewVideo({...newVideo, youtubeUrl: e.target.value})} 
+                    required 
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={isSaving}
+                  className="md:col-span-3 bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  {VIDEO_GALLERIES.map(gal => <option key={gal} value={gal}>{gal}</option>)}
-                </select>
-                <input 
-                  placeholder="YouTube URL" 
-                  className="p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100" 
-                  value={newVideo.youtubeUrl} 
-                  onChange={e => setNewVideo({...newVideo, youtubeUrl: e.target.value})} 
-                  required 
-                />
-                <button type="submit" className="md:col-span-3 bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-700 transition-colors">Add Video to Selected Gallery</button>
+                  {isSaving ? <Loader2 className="animate-spin w-4 h-4" /> : <Plus size={16} />}
+                  Add Video to Gallery
+                </button>
               </form>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {videos.map(v => (
+                {videos.length === 0 ? (
+                  <p className="col-span-full text-center py-8 text-slate-300 font-medium italic">No videos in gallery yet.</p>
+                ) : videos.map(v => (
                   <div key={v.id} className="relative group rounded-xl overflow-hidden aspect-video bg-slate-100 shadow-inner border border-slate-50">
                     <img src={`https://img.youtube.com/vi/${v.videoId}/mqdefault.jpg`} className="w-full h-full object-cover" alt={v.title} />
-                    <div className="absolute top-2 left-2 bg-black/60 text-white text-[8px] px-2 py-1 rounded font-bold uppercase">{v.gallery || 'General'}</div>
+                    <div className="absolute top-2 left-2 bg-black/60 text-white text-[8px] px-2 py-1 rounded font-bold uppercase backdrop-blur-md">{v.gallery || 'General'}</div>
                     <button onClick={() => handleDeleteVideo(v.id)} className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14} /></button>
                   </div>
                 ))}
@@ -410,7 +463,7 @@ export default function App() {
                 <input placeholder="Slide Main Title" className="p-4 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-orange-500 text-white" value={newBanner.title} onChange={e => setNewBanner({...newBanner, title: e.target.value})} required />
                 <input placeholder="Background Image URL" className="p-4 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none focus:border-orange-500 text-white" value={newBanner.image} onChange={e => setNewBanner({...newBanner, image: e.target.value})} />
                 <textarea placeholder="Slide Subtitle" className="md:col-span-2 p-4 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none h-20 text-white" value={newBanner.subtitle} onChange={e => setNewBanner({...newBanner, subtitle: e.target.value})} required />
-                <button type="submit" className="md:col-span-2 bg-orange-600 p-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-orange-500 transition-all">Create New Banner Slide</button>
+                <button type="submit" disabled={isSaving} className="md:col-span-2 bg-orange-600 p-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-orange-500 transition-all disabled:opacity-50">Create New Banner Slide</button>
               </form>
               <div className="space-y-3 relative z-10">
                 {banners.map(b => (
@@ -442,7 +495,7 @@ export default function App() {
                   <p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Tagline</p>
                   <input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.tagline} onChange={e => setEditSettings({...editSettings, tagline: e.target.value})} />
                 </div>
-                <button type="submit" className="md:col-span-2 bg-slate-900 text-white p-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-black transition-all">Update Site Branding</button>
+                <button type="submit" disabled={isSaving} className="md:col-span-2 bg-slate-900 text-white p-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-black transition-all">Update Site Branding</button>
               </form>
             </div>
 
@@ -451,11 +504,6 @@ export default function App() {
               <h2 className={`text-xl font-black italic uppercase tracking-tighter mb-8 flex items-center gap-2 ${editingId ? 'text-blue-600' : 'text-orange-600'}`}>
                 {editingId ? <Pencil className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />} {editingId ? "Edit Existing Work" : "Publish New Work"}
               </h2>
-              {statusMsg.text && (
-                <div className={`mb-6 p-4 rounded-xl flex items-center gap-3 font-bold text-xs ${statusMsg.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                  <AlertCircle size={16} /> {statusMsg.text}
-                </div>
-              )}
               <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 <input placeholder="Project Title" className="p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
                 <select className="p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100 cursor-pointer" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
@@ -465,7 +513,7 @@ export default function App() {
                 <input placeholder="Image Link" className="md:col-span-3 p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100" value={newProduct.image} onChange={e => setNewProduct({...newProduct, image: e.target.value})} required />
                 <textarea placeholder="Description..." className="md:col-span-3 p-4 bg-slate-50 rounded-2xl h-24 text-sm outline-none border border-slate-100" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
                 <div className="md:col-span-3 flex gap-3">
-                  <button type="submit" className={`flex-1 py-4 rounded-[1.5rem] font-black uppercase text-xs tracking-widest text-white shadow-xl transition-all ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-900 hover:bg-black'}`}>
+                  <button type="submit" disabled={isSaving} className={`flex-1 py-4 rounded-[1.5rem] font-black uppercase text-xs tracking-widest text-white shadow-xl transition-all ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-900 hover:bg-black'}`}>
                     {editingId ? "Save Changes" : "Add to Live Catalog"}
                   </button>
                   {editingId && (
@@ -543,17 +591,17 @@ export default function App() {
           </div>
         )}
 
-        {/* VIDEOS SECTION (Ajustada para exibir Galeria) */}
+        {/* VIDEOS SECTION */}
         {!isAdminMode && videos.length > 0 && filter === "All" && (
-          <div className="mb-16 text-left">
+          <div className="mb-16 text-left animate-in fade-in duration-700">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
-                <PlayCircle className="text-red-600" /> Video Portfólio
+                <PlayCircle className="text-red-600" /> Video Portfolio
               </h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {videos.map(v => (
-                <div key={v.id} className="bg-white rounded-[2rem] p-4 shadow-sm border border-slate-100 hover:shadow-xl transition-all flex flex-col">
+                <div key={v.id} className="bg-white rounded-[2rem] p-4 shadow-sm border border-slate-100 hover:shadow-xl transition-all flex flex-col group">
                   <div className="aspect-video rounded-2xl overflow-hidden mb-4 bg-slate-900 group relative shadow-inner">
                     <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${v.videoId}`} title={v.title} frameBorder="0" allowFullScreen></iframe>
                   </div>
@@ -571,7 +619,7 @@ export default function App() {
         <div className="flex flex-col gap-6 mb-12">
           <div className="hidden sm:flex flex-wrap justify-center gap-2">
             {CATEGORIES.map(cat => (
-              <button key={cat} onClick={() => setFilter(cat)} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all border ${filter === cat ? "bg-slate-900 text-white border-slate-900 scale-105" : "bg-white text-slate-500 border-slate-200 hover:border-orange-500"}`}>
+              <button key={cat} onClick={() => setFilter(cat)} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all border ${filter === cat ? "bg-slate-900 text-white border-slate-900 scale-105 shadow-md" : "bg-white text-slate-500 border-slate-200 hover:border-orange-500"}`}>
                 {cat}
               </button>
             ))}
