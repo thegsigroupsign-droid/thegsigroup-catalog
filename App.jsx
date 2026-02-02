@@ -95,7 +95,6 @@ export default function App() {
   
   // AI Chat State
   const [aiMessages, setAiMessages] = useState([]);
-  const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [isMobileCategoryMenuOpen, setIsMobileCategoryMenuOpen] = useState(false);
 
   // Atalho pesquisa (/)
@@ -170,24 +169,25 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // --- ✅ LÓGICA DE CHAT COM REDIRECIONAMENTO AUTOMÁTICO ---
+  // --- ✅ LÓGICA DE CHAT COM REDIRECIONAMENTO CORRIGIDA ---
+  const openAiChat = () => {
+    setAiMessages([{
+      role: 'assistant',
+      text: `Welcome to ${siteSettings.companyName}! 🇺🇸\nWe're here to make your brand shine. Redirecting you to our team on WhatsApp for a personalized project consultation...`
+    }]);
+    setIsAiChatOpen(true);
+  };
+
   useEffect(() => {
-    if (isAiChatOpen && aiMessages.length === 0) {
-      // 1. Mostrar Boas-vindas
-      setAiMessages([{
-        role: 'assistant',
-        text: `Welcome to ${siteSettings.companyName}! 🇺🇸\nWe're here to make your brand shine. Redirecting you to our team on WhatsApp for a personalized project consultation...`
-      }]);
-      
-      // 2. Redirecionar após 2.5 segundos
+    if (isAiChatOpen) {
       const timer = setTimeout(() => {
         window.open(`https://wa.me/${siteSettings.whatsapp}?text=Hi! I would like to start a project with GSI Group.`, '_blank');
-        setIsAiChatOpen(false); // Fecha o modal após abrir o link
+        setIsAiChatOpen(false);
+        setAiMessages([]); // Limpa para a próxima vez
       }, 2500);
-
       return () => clearTimeout(timer);
     }
-  }, [isAiChatOpen, siteSettings]);
+  }, [isAiChatOpen, siteSettings.whatsapp]);
 
   // Handlers Admin
   const handleAddVideo = async (e) => {
@@ -334,7 +334,7 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
         
-        {/* DASHBOARD ADMIN */}
+        {/* DASHBOARD ADMIN COMPLETO */}
         {isAdminMode && (
           <div className="mb-12 space-y-8 animate-in slide-in-from-top-6 duration-700 text-left">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -348,6 +348,7 @@ export default function App() {
               </div>
             </div>
 
+            {/* Vídeos Admin */}
             <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-100">
                <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-red-600 uppercase italic tracking-tighter"><Youtube className="w-5 h-5" /> Video Gallery Control</h2>
               <form onSubmit={handleAddVideo} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -358,25 +359,69 @@ export default function App() {
                 <input placeholder="Link YouTube" className="p-4 bg-slate-50 rounded-2xl text-sm border border-slate-100" value={newVideo.youtubeUrl} onChange={e => setNewVideo({...newVideo, youtubeUrl: e.target.value})} required />
                 <button type="submit" disabled={isSaving} className="md:col-span-3 bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs">Adicionar Vídeo</button>
               </form>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {videos.map(v => (
+                  <div key={v.id} className="relative group rounded-xl overflow-hidden aspect-video bg-slate-100">
+                    <img src={`https://img.youtube.com/vi/${v.videoId}/mqdefault.jpg`} className="w-full h-full object-cover" />
+                    <button onClick={() => handleDeleteVideo(v.id)} className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
             </div>
 
+            {/* --- ✅ RESTAURAÇÃO: GESTÃO DE BANNERS --- */}
+            <div className="bg-slate-900 rounded-[2.5rem] p-6 sm:p-8 text-white shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl"></div>
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-orange-500 uppercase italic tracking-tighter relative z-10"><ImageIcon className="w-5 h-5" /> Homepage Slideshow (Banners)</h2>
+              <form onSubmit={handleAddBanner} className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 relative z-10">
+                <input placeholder="Título do Slide" className="p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-white focus:border-orange-500 outline-none" value={newBanner.title} onChange={e => setNewBanner({...newBanner, title: e.target.value})} required />
+                <input placeholder="Link da Imagem (Fundo)" className="p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-white focus:border-orange-500 outline-none" value={newBanner.image} onChange={e => setNewBanner({...newBanner, image: e.target.value})} />
+                <textarea placeholder="Subtítulo do Slide" className="md:col-span-2 p-4 bg-white/5 border border-white/10 rounded-2xl text-sm h-20 text-white focus:border-orange-500 outline-none" value={newBanner.subtitle} onChange={e => setNewBanner({...newBanner, subtitle: e.target.value})} required />
+                <button type="submit" disabled={isSaving} className="md:col-span-2 bg-orange-600 p-4 rounded-2xl font-black uppercase text-xs hover:bg-orange-500 transition-all shadow-lg">Criar Novo Slide</button>
+              </form>
+              <div className="space-y-2 relative z-10">
+                {banners.map(b => (
+                  <div key={b.id} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10 group">
+                    <div className="flex items-center gap-4">
+                      {b.image && <img src={b.image} className="w-12 h-12 rounded-lg object-cover" />}
+                      <div className="text-left"><p className="font-bold text-sm">{b.title}</p><p className="text-[10px] opacity-40">{b.subtitle.substring(0, 50)}...</p></div>
+                    </div>
+                    {!b.isDefault && <button onClick={() => handleDeleteBanner(b.id)} className="text-white/20 hover:text-red-500 transition-colors p-2"><Trash2 size={18} /></button>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* --- ✅ RESTAURAÇÃO: DEFINIÇÕES GLOBAIS --- */}
+            <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-100">
+               <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900 uppercase italic tracking-tighter"><Settings className="w-5 h-5" /> Site Branding & Contact</h2>
+              <form onSubmit={handleSaveSettings} className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Company Name</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.companyName} onChange={e => setEditSettings({...editSettings, companyName: e.target.value})} /></div>
+                <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">WhatsApp (Numbers only)</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.whatsapp} onChange={e => setEditSettings({...editSettings, whatsapp: e.target.value})} /></div>
+                <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Business Address</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.address} onChange={e => setEditSettings({...editSettings, address: e.target.value})} /></div>
+                <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Badge Text (Quality Stamp)</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.badgeText} onChange={e => setEditSettings({...editSettings, badgeText: e.target.value})} /></div>
+                <button type="submit" disabled={isSaving} className="md:col-span-2 bg-slate-900 text-white p-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-black transition-all shadow-xl">Guardar Definições Globais</button>
+              </form>
+            </div>
+
+            {/* Produto Admin */}
             <div className={`bg-white border-2 rounded-[2.5rem] p-6 sm:p-8 shadow-2xl transition-all ${editingId ? 'border-blue-500' : 'border-orange-100'}`}>
               <h2 className={`text-xl font-black italic uppercase tracking-tighter mb-8 flex items-center gap-2 ${editingId ? 'text-blue-600' : 'text-orange-600'}`}>{editingId ? <Pencil className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />} {editingId ? "Editar" : "Novo Trabalho"}</h2>
               <form onSubmit={handleAddProduct} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  <input placeholder="Título" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
-                  <select className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
+                  <input placeholder="Título" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
+                  <select className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none cursor-pointer" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
                     {CATEGORIES.filter(c => c !== "All").map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
-                  <input placeholder="Preço" type="number" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
+                  <input placeholder="Preço" type="number" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
                 </div>
                 <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4">
                   {newProduct.images.map((url, idx) => (
-                    <input key={idx} placeholder={`Link Foto ${idx + 1}`} className="w-full p-4 bg-white border border-slate-100 rounded-2xl text-sm" value={url} onChange={e => { const ni = [...newProduct.images]; ni[idx] = e.target.value; setNewProduct({...newProduct, images: ni}); }} />
+                    <input key={idx} placeholder={`Link Foto ${idx + 1}`} className="w-full p-4 bg-white border border-slate-100 rounded-2xl text-sm outline-none" value={url} onChange={e => { const ni = [...newProduct.images]; ni[idx] = e.target.value; setNewProduct({...newProduct, images: ni}); }} />
                   ))}
                 </div>
-                <textarea placeholder="Descrição" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl h-24 text-sm" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
-                <button type="submit" className={`w-full py-4 rounded-[1.5rem] font-black uppercase text-xs text-white shadow-xl ${editingId ? 'bg-blue-600' : 'bg-slate-900'}`}>Guardar</button>
+                <textarea placeholder="Descrição" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl h-24 text-sm outline-none" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
+                <button type="submit" className={`w-full py-4 rounded-[1.5rem] font-black uppercase text-xs text-white shadow-xl transition-all ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-900 hover:bg-black'}`}>Guardar</button>
               </form>
             </div>
           </div>
@@ -389,9 +434,12 @@ export default function App() {
               <div key={slide.id} className={`absolute inset-0 transition-all duration-1000 transform flex items-center px-6 sm:px-14 ${index === currentSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} style={{ backgroundColor: slide.image ? 'transparent' : siteSettings?.primaryColor, backgroundImage: slide.image ? `url(${slide.image})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }}>
                 {slide.image && <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"></div>}
                 <div className="relative z-10 max-w-2xl text-left text-white animate-in slide-in-from-bottom-6">
+                  <div className="inline-flex items-center gap-2 bg-white/20 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] mb-4 backdrop-blur-md border border-white/10">
+                    <Award className="w-3 h-3"/> {siteSettings?.badgeText}
+                  </div>
                   <h2 className="text-2xl sm:text-7xl font-black mb-4 uppercase leading-[1]"> {slide.title} </h2>
                   <p className="text-white/90 mb-6 text-xs sm:text-xl font-medium max-w-md">{slide.subtitle}</p>
-                  <button onClick={() => setIsAiChatOpen(true)} className="bg-white text-slate-900 px-6 sm:px-10 py-3 sm:py-4 rounded-full font-black uppercase text-[10px] sm:text-xs">Start Project</button>
+                  <button onClick={openAiChat} className="bg-white text-slate-900 px-6 sm:px-10 py-3 sm:py-4 rounded-full font-black uppercase text-[10px] sm:text-xs shadow-xl hover:scale-105 transition-all">Start Project</button>
                 </div>
               </div>
             ))}
@@ -405,7 +453,7 @@ export default function App() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {videos.map(v => (
                 <div key={v.id} className="bg-white rounded-[2rem] p-4 shadow-sm border border-slate-100">
-                  <div className="aspect-video rounded-2xl overflow-hidden mb-4 bg-slate-900"><iframe className="w-full h-full" src={`https://www.youtube.com/embed/${v.videoId}`} title={v.title} frameBorder="0" allowFullScreen></iframe></div>
+                  <div className="aspect-video rounded-2xl overflow-hidden mb-4 bg-slate-900 shadow-inner"><iframe className="w-full h-full" src={`https://www.youtube.com/embed/${v.videoId}`} title={v.title} frameBorder="0" allowFullScreen></iframe></div>
                   <span className="text-[8px] font-black text-red-600 uppercase mb-1 block">{v.gallery || 'General'}</span>
                   <h3 className="font-bold text-slate-800 uppercase truncate">{v.title}</h3>
                 </div>
@@ -417,7 +465,7 @@ export default function App() {
         {/* CATEGORIES MOBILE SELETOR */}
         <div className="flex flex-col gap-6 mb-12">
           <div className="hidden sm:flex flex-wrap justify-center gap-2">
-            {CATEGORIES.map(cat => <button key={cat} onClick={() => setFilter(cat)} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-wider border ${filter === cat ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{cat}</button>)}
+            {CATEGORIES.map(cat => <button key={cat} onClick={() => setFilter(cat)} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-wider border transition-all ${filter === cat ? "bg-slate-900 text-white border-slate-900 scale-105 shadow-md" : "bg-white text-slate-500 hover:border-orange-500"}`}>{cat}</button>)}
           </div>
           <div className="sm:hidden relative">
             <button onClick={() => setIsMobileCategoryMenuOpen(!isMobileCategoryMenuOpen)} className="w-full bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between font-black text-[12px] uppercase shadow-sm">
@@ -438,13 +486,13 @@ export default function App() {
             <div key={product.id} className="group bg-white rounded-[2.5rem] border border-slate-100 p-4 hover:shadow-2xl transition-all flex flex-col shadow-sm">
               <div className="aspect-square rounded-[2rem] overflow-hidden bg-slate-50 mb-6 relative">
                 <img src={product.images ? product.images[0] : product.image} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700" alt={product.name} />
-                <div className="absolute top-4 left-4 bg-orange-600 text-white text-[8px] font-black px-3 py-1.5 rounded-lg shadow-lg">{siteSettings?.badgeText}</div>
-                <button onClick={() => handleShare(product)} className="absolute top-4 right-4 bg-white/20 backdrop-blur-md text-white p-2 rounded-xl"><Share2 size={16} /></button>
+                <div className="absolute top-4 left-4 bg-orange-600 text-white text-[8px] font-black px-3 py-1.5 rounded-lg shadow-lg uppercase">{siteSettings?.badgeText}</div>
+                <button onClick={() => handleShare(product)} className="absolute top-4 right-4 bg-white/20 backdrop-blur-md text-white p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-all"><Share2 size={16} /></button>
               </div>
               <h3 className="font-bold text-slate-900 text-lg mb-4 uppercase line-clamp-1 tracking-tighter">{product.name}</h3>
               <div className="flex justify-between items-center mt-auto pt-5 border-t border-slate-50">
-                <span className="text-xl font-black text-slate-900">${Number(product.price).toLocaleString()}</span>
-                <button onClick={() => { setSelectedProduct(product); setCurrentProductImgIdx(0); }} className="bg-slate-900 text-white p-3 rounded-xl"><Maximize size={18} /></button>
+                <div className="flex flex-col"><span className="text-[9px] text-slate-400 font-bold uppercase leading-none">A partir de</span><span className="text-xl font-black text-slate-900">${Number(product.price).toLocaleString()}</span></div>
+                <button onClick={() => { setSelectedProduct(product); setCurrentProductImgIdx(0); }} className="bg-slate-900 text-white p-3 rounded-xl hover:bg-orange-600 shadow-md"><Maximize size={18} /></button>
               </div>
             </div>
           ))}
@@ -452,34 +500,32 @@ export default function App() {
       </main>
 
       {/* FOOTER */}
-      <footer className="bg-slate-900 text-white py-12 px-4 text-center mt-20">
-        <h2 className="text-2xl font-black uppercase mb-8">{siteSettings.companyName}</h2>
-        <div className="flex flex-col sm:flex-row justify-center gap-6 text-[10px] font-black uppercase text-slate-500">
-          <div className="flex items-center justify-center gap-2"><MapPin size={14} className="text-orange-500" /> {siteSettings?.address}</div>
-          <div className="flex items-center justify-center gap-2"><Phone size={14} className="text-orange-500" /> {siteSettings?.whatsapp}</div>
+      <footer className="bg-slate-900 text-white py-12 px-4 text-center mt-20 border-t border-white/5">
+        <h2 className="text-2xl font-black uppercase mb-8 tracking-tighter italic">THE <span style={{ color: siteSettings?.primaryColor }}>GSI</span> GROUP</h2>
+        <div className="flex flex-col sm:flex-row justify-center gap-8 text-[10px] font-black uppercase text-slate-500">
+          <div className="flex items-center justify-center gap-2"><MapPin size={14} className="text-orange-500 shrink-0" /> {siteSettings?.address}</div>
+          <div className="flex items-center justify-center gap-2"><Phone size={14} className="text-orange-500 shrink-0" /> +1 {siteSettings?.whatsapp}</div>
         </div>
       </footer>
 
-      {/* --- ✅ LOGIN ADMIN MODAL --- */}
+      {/* MODAL: LOGIN ADMIN */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl animate-in fade-in">
-          <div className="bg-white rounded-[3rem] p-10 max-w-sm w-full text-center space-y-6">
-            <Lock className="mx-auto text-orange-600" size={40} />
-            <h2 className="text-2xl font-black uppercase tracking-tighter">Admin Login</h2>
+          <div className="bg-white rounded-[3rem] p-10 max-w-sm w-full text-center space-y-6 shadow-2xl">
+            <div className="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center mx-auto"><Lock className="text-orange-600" size={40} /></div>
+            <h2 className="text-2xl font-black uppercase tracking-tighter">Admin Access</h2>
             <form onSubmit={handlePasswordSubmit} className="space-y-4">
-              <input type="password" placeholder="••••••••" className="w-full p-5 bg-slate-50 border-2 rounded-2xl text-center text-xl font-bold" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoFocus />
-              <button type="submit" className="w-full p-4 bg-orange-600 text-white rounded-2xl font-black uppercase text-xs">Unlock Panel</button>
+              <input type="password" placeholder="••••••••" className={`w-full p-5 bg-slate-50 border-2 rounded-2xl text-center text-xl font-bold outline-none ${passwordError ? 'border-red-500 animate-shake' : 'border-slate-100'}`} value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoFocus />
+              <button type="submit" className="w-full p-4 bg-orange-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl">Unlock Dashboard</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* --- ✅ DETALHES DO PRODUTO (MODAL RESPONSIVO) --- */}
+      {/* MODAL: DETALHES DO PRODUTO */}
       {selectedProduct && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/90 backdrop-blur-md p-2 sm:p-6 overflow-y-auto">
           <div className="bg-white rounded-[2.5rem] max-w-6xl w-full flex flex-col lg:flex-row overflow-hidden shadow-2xl my-auto animate-in zoom-in duration-300 max-h-[95vh]">
-            
-            {/* Slide Imagens */}
             <div className="lg:w-3/5 h-[300px] sm:h-[500px] lg:h-auto relative bg-black shrink-0 group">
               <div className="w-full h-full flex transition-transform duration-500 ease-out" style={{ transform: `translateX(-${currentProductImgIdx * 100}%)` }}>
                 {(selectedProduct.images || [selectedProduct.image]).map((img, i) => (
@@ -488,60 +534,61 @@ export default function App() {
               </div>
               {(selectedProduct.images?.length > 1) && (
                 <>
-                  <button onClick={prevProdImg} className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white p-2 sm:p-3 rounded-full backdrop-blur-md transition-all"><ChevronLeft size={20} /></button>
-                  <button onClick={nextProdImg} className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white p-2 sm:p-3 rounded-full backdrop-blur-md transition-all"><ChevronRight size={20} /></button>
+                  <button onClick={prevProdImg} className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white p-3 rounded-full backdrop-blur-md transition-all"><ChevronLeft size={24} /></button>
+                  <button onClick={nextProdImg} className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white p-3 rounded-full backdrop-blur-md transition-all"><ChevronRight size={24} /></button>
                 </>
               )}
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
                 {(selectedProduct.images || [selectedProduct.image]).map((_, i) => (
-                  <button key={i} onClick={() => setCurrentProductImgIdx(i)} className={`h-1 rounded-full transition-all ${i === currentProductImgIdx ? 'w-6 bg-white' : 'w-2 bg-white/30'}`} />
+                  <button key={i} onClick={() => setCurrentProductImgIdx(i)} className={`h-1.5 rounded-full transition-all ${i === currentProductImgIdx ? 'w-8 bg-white' : 'w-2 bg-white/40'}`} />
                 ))}
               </div>
-              <button onClick={() => setSelectedProduct(null)} className="absolute top-4 left-4 bg-black/40 text-white p-2 rounded-full lg:hidden"><X size={20} /></button>
+              <button onClick={() => setSelectedProduct(null)} className="absolute top-6 left-6 bg-black/40 text-white p-2 rounded-full lg:hidden shadow-lg"><X size={24} /></button>
             </div>
 
-            {/* Texto */}
-            <div className="lg:w-2/5 p-6 sm:p-12 flex flex-col justify-center relative bg-white overflow-y-auto">
-              <button onClick={() => setSelectedProduct(null)} className="hidden lg:block absolute top-6 right-6 text-slate-300 hover:text-slate-900"><X size={32} /></button>
-              <span className="text-orange-600 font-black text-[10px] uppercase bg-orange-50 px-4 py-2 rounded-xl w-fit">{selectedProduct.category}</span>
-              <h2 className="text-2xl sm:text-4xl font-black text-slate-900 mt-4 mb-6 uppercase tracking-tighter leading-tight">{selectedProduct.name}</h2>
-              <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 mb-8 max-h-[150px] overflow-y-auto">
-                <p className="text-slate-600 text-sm sm:text-base italic leading-relaxed">"{selectedProduct.description}"</p>
+            <div className="lg:w-2/5 p-8 sm:p-14 flex flex-col justify-center relative bg-white overflow-y-auto">
+              <button onClick={() => setSelectedProduct(null)} className="hidden lg:block absolute top-8 right-8 text-slate-300 hover:text-slate-900 transition-all"><X size={32} /></button>
+              <span className="text-orange-600 font-black text-[10px] uppercase bg-orange-50 px-5 py-2.5 rounded-xl w-fit mb-4">{selectedProduct.category}</span>
+              <h2 className="text-3xl sm:text-5xl font-black text-slate-900 mb-8 uppercase tracking-tighter leading-tight">{selectedProduct.name}</h2>
+              <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-100 mb-10 shadow-inner max-h-[150px] overflow-y-auto no-scrollbar">
+                <p className="text-slate-600 text-lg italic leading-relaxed">"{selectedProduct.description}"</p>
               </div>
-              <div className="flex items-center justify-between gap-4 pt-6 border-t border-slate-100">
-                <span className="text-3xl font-black text-slate-900">${Number(selectedProduct.price).toLocaleString()}</span>
-                <button onClick={() => window.open(`https://wa.me/${siteSettings?.whatsapp}?text=Saw ${selectedProduct.name} and want a quote.`)} className="flex-1 bg-orange-600 text-white py-4 rounded-2xl font-black uppercase text-[10px] sm:text-xs shadow-xl flex items-center justify-center gap-2">Quote <ExternalLink size={14} /></button>
+              <div className="flex items-center justify-between gap-6 pt-6 border-t border-slate-100 mt-auto">
+                <span className="text-4xl font-black text-slate-900">${Number(selectedProduct.price).toLocaleString()}</span>
+                <button onClick={() => window.open(`https://wa.me/${siteSettings?.whatsapp}?text=Saw ${selectedProduct.name} and want a quote.`)} className="flex-1 bg-orange-600 text-white py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl flex items-center justify-center gap-3 hover:bg-orange-700 transition-all">Request Quote <ExternalLink size={18} /></button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* --- ✅ AI CHAT REDIRECT MODAL --- */}
+      {/* --- ✅ MODAL DE CHAT COM REDIRECIONAMENTO --- */}
       <div className={`fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm transition-all transform ${isAiChatOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'}`}>
-        <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-[400px] overflow-hidden text-left">
+        <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-[420px] overflow-hidden text-left animate-in zoom-in-95">
           <div className="bg-slate-900 p-8 text-white flex justify-between items-center relative">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-orange-500 flex items-center justify-center"><MessageSquare size={24} /></div>
-              <div className="leading-none"><h4 className="font-black uppercase tracking-tight mb-1">GSI Consultant</h4><p className="text-[10px] text-orange-400 font-bold uppercase">Redirecting...</p></div>
+            <div className="flex items-center gap-4 relative z-10">
+              <div className="w-14 h-14 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg"><MessageSquare size={28} /></div>
+              <div className="leading-tight"><h4 className="font-black uppercase tracking-tight text-white">GSI Assistant</h4><p className="text-[10px] text-orange-400 font-bold uppercase tracking-widest">Instant Redirect</p></div>
             </div>
-            <button onClick={() => setIsAiChatOpen(false)} className="text-white/40 hover:text-white"><X size={24} /></button>
+            <button onClick={() => setIsAiChatOpen(false)} className="relative z-10 text-white/40 hover:text-white transition-colors"><X size={28} /></button>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/20 rounded-full blur-3xl"></div>
           </div>
-          <div className="p-8 space-y-4 bg-white text-center">
+          <div className="p-10 space-y-6 bg-white text-center">
             {aiMessages.map((msg, i) => (
-              <div key={i} className="text-slate-700 text-sm sm:text-base leading-relaxed font-medium animate-in fade-in">
-                {msg.text}
+              <div key={i} className="text-slate-700 text-sm sm:text-lg leading-relaxed font-medium">
+                {msg.text.split('\n').map((line, j) => <p key={j}>{line}</p>)}
               </div>
             ))}
-            <div className="pt-4 flex justify-center">
-              <Loader2 className="animate-spin text-orange-500" size={32} />
+            <div className="pt-4 flex flex-col items-center gap-4">
+              <Loader2 className="animate-spin text-orange-500" size={40} />
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Launching WhatsApp...</p>
             </div>
           </div>
         </div>
       </div>
       
       {!isAiChatOpen && (
-        <button onClick={() => setIsAiChatOpen(true)} className="fixed bottom-6 right-6 sm:bottom-10 sm:right-10 bg-orange-500 text-white p-5 sm:p-6 rounded-[2rem] shadow-2xl hover:scale-110 active:scale-95 transition-all z-40 border-4 border-white">
+        <button onClick={openAiChat} className="fixed bottom-6 right-6 sm:bottom-10 sm:right-10 bg-orange-500 text-white p-5 sm:p-6 rounded-[2.2rem] shadow-[0_20px_50px_rgba(243,111,33,0.4)] hover:scale-110 active:scale-95 transition-all z-40 border-4 border-white">
           <MessageSquare size={32} />
         </button>
       )}
