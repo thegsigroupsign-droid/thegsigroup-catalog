@@ -72,6 +72,7 @@ export default function App() {
   const [sortBy, setSortBy] = useState("newest");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [currentProductImgIdx, setCurrentProductImgIdx] = useState(0); // Para o slide do produto
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
@@ -86,7 +87,13 @@ export default function App() {
   // Estados de Edição Admin
   const [editSettings, setEditSettings] = useState(DEFAULT_SETTINGS);
   const [editingId, setEditingId] = useState(null);
-  const [newProduct, setNewProduct] = useState({ name: '', category: 'Digital marketing', price: '', description: '', image: '' });
+  const [newProduct, setNewProduct] = useState({ 
+    name: '', 
+    category: 'Digital marketing', 
+    price: '', 
+    description: '', 
+    images: ['', '', '', '', ''] // Array para múltiplas imagens
+  });
   const [newBanner, setNewBanner] = useState({ title: '', subtitle: '', image: '', active: true });
   const [newVideo, setNewVideo] = useState({ title: '', youtubeUrl: '', gallery: 'General' });
   
@@ -225,24 +232,68 @@ export default function App() {
   const handleAddProduct = async (e) => {
     e.preventDefault();
     if (!db || isSaving || !user) return;
+    
+    // Filtrar imagens vazias
+    const filteredImages = newProduct.images.filter(url => url.trim() !== '');
+    if (filteredImages.length === 0) {
+      setStatusMsg({ type: 'error', text: 'Adicione pelo menos uma imagem.' });
+      return;
+    }
+
     setIsSaving(true);
     try {
+      const productData = { 
+        ...newProduct, 
+        images: filteredImages, // Salva o array de imagens
+        image: filteredImages[0], // Mantém campo antigo para compatibilidade
+        price: Number(newProduct.price),
+      };
+
       if (editingId) {
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', editingId), { 
-          ...newProduct, 
-          price: Number(newProduct.price), 
-          updatedAt: new Date().toISOString() 
-        });
+        productData.updatedAt = new Date().toISOString();
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', editingId), productData);
         setEditingId(null);
       } else {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), { 
-          ...newProduct, 
-          price: Number(newProduct.price), 
-          createdAt: new Date().toISOString() 
-        });
+        productData.createdAt = new Date().toISOString();
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), productData);
       }
-      setNewProduct({ name: '', category: 'Digital marketing', price: '', description: '', image: '' });
+      setNewProduct({ name: '', category: 'Digital marketing', price: '', description: '', images: ['', '', '', '', ''] });
       setStatusMsg({ type: 'success', text: 'Trabalho guardado!' });
+    } catch (err) { setStatusMsg({ type: 'error', text: 'Erro ao guardar.' }); }
+    finally { setIsSaving(false); setTimeout(() => setStatusMsg({ type: '', text: '' }), 3000); }
+  };
+
+  const handleEditClick = (product) => {
+    setEditingId(product.id);
+    // Garantir que o array tenha 5 posições para o formulário
+    const existingImages = product.images || [product.image];
+    const paddedImages = [...existingImages, '', '', '', '', ''].slice(0, 5);
+    
+    setNewProduct({
+      name: product.name,
+      category: product.category,
+      price: product.price,
+      description: product.description,
+      images: paddedImages
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDeleteProduct = async (id) => {
+    if (!db || !user) return;
+    if (window.confirm("Eliminar este trabalho?")) {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
+    }
+  };
+
+  const handleSaveSettings = async (e) => {
+    e.preventDefault();
+    if (!db || isSaving || !user) return;
+    setIsSaving(true);
+    try {
+      const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global');
+      await setDoc(settingsRef, editSettings);
+      setStatusMsg({ type: 'success', text: 'Definições guardadas!' });
     } catch (err) { setStatusMsg({ type: 'error', text: 'Erro ao guardar.' }); }
     finally { setIsSaving(false); setTimeout(() => setStatusMsg({ type: '', text: '' }), 3000); }
   };
@@ -282,6 +333,16 @@ export default function App() {
     total: products.length,
     avgPrice: products.length ? Math.round(products.reduce((acc, p) => acc + Number(p.price), 0) / products.length) : 0,
   }), [products]);
+
+  // Funções para o slide do Modal de Detalhes
+  const nextProdImg = () => {
+    if (!selectedProduct?.images) return;
+    setCurrentProductImgIdx(prev => (prev + 1) % selectedProduct.images.length);
+  };
+  const prevProdImg = () => {
+    if (!selectedProduct?.images) return;
+    setCurrentProductImgIdx(prev => (prev - 1 + selectedProduct.images.length) % selectedProduct.images.length);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans overflow-x-hidden selection:bg-orange-100">
@@ -391,20 +452,50 @@ export default function App() {
               </div>
             </div>
 
-            {/* Produto Admin */}
+            {/* Adicionar / Editar Produto (Múltiplas Imagens) */}
             <div className={`bg-white border-2 rounded-[2.5rem] p-6 sm:p-8 shadow-2xl transition-all ${editingId ? 'border-blue-500' : 'border-orange-100'}`}>
               <h2 className={`text-xl font-black italic uppercase tracking-tighter mb-8 flex items-center gap-2 ${editingId ? 'text-blue-600' : 'text-orange-600'}`}>
-                {editingId ? <Pencil className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />} {editingId ? "Editar" : "Novo Trabalho"}
+                {editingId ? <Pencil className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />} {editingId ? "Editar Trabalho" : "Novo Trabalho"}
               </h2>
-              <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <input placeholder="Título" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
-                <select className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
-                  {CATEGORIES.filter(c => c !== "All").map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <input placeholder="Preço" type="number" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
-                <input placeholder="Imagem Link" className="md:col-span-3 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={newProduct.image} onChange={e => setNewProduct({...newProduct, image: e.target.value})} required />
-                <textarea placeholder="Descrição" className="md:col-span-3 p-4 bg-slate-50 border border-slate-100 rounded-2xl h-24 text-sm" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
-                <button type="submit" className="md:col-span-3 bg-slate-900 text-white py-4 rounded-[1.5rem] font-black uppercase text-xs">Guardar</button>
+              <form onSubmit={handleAddProduct} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <input placeholder="Título" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
+                  <select className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
+                    {CATEGORIES.filter(c => c !== "All").map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <input placeholder="Preço" type="number" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
+                </div>
+                
+                {/* Campos de Imagens Numerados */}
+                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                  <h3 className="text-xs font-black uppercase text-slate-400 mb-4 ml-1 flex items-center gap-2">
+                    <ImageIcon size={14} /> Links das Imagens (Até 5 fotos para o slide)
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {newProduct.images.map((url, idx) => (
+                      <div key={idx} className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-orange-500 bg-orange-50 w-6 h-6 rounded-full flex items-center justify-center">
+                          {idx + 1}
+                        </span>
+                        <input 
+                          placeholder={`Link da Foto ${idx + 1}`} 
+                          className="w-full p-4 pl-12 bg-white border border-slate-100 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-orange-100 transition-all" 
+                          value={url} 
+                          onChange={e => {
+                            const newImages = [...newProduct.images];
+                            newImages[idx] = e.target.value;
+                            setNewProduct({...newProduct, images: newImages});
+                          }} 
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <textarea placeholder="Descrição" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl h-24 text-sm" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
+                <button type="submit" disabled={isSaving} className={`w-full py-4 rounded-[1.5rem] font-black uppercase text-xs text-white transition-all shadow-xl ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-900 hover:bg-black'}`}>
+                  {isSaving ? "A guardar..." : editingId ? "Atualizar Trabalho" : "Publicar no Portfólio"}
+                </button>
               </form>
             </div>
 
@@ -489,9 +580,8 @@ export default function App() {
           </div>
         )}
 
-        {/* --- ✅ RESTAURAÇÃO DO MENU DE CATEGORIAS MOBILE (HAMBURGER / DROPDOWN) --- */}
+        {/* MENU DE CATEGORIAS */}
         <div className="flex flex-col gap-6 mb-12">
-          {/* Desktop Version */}
           <div className="hidden sm:flex flex-wrap justify-center gap-2">
             {CATEGORIES.map(cat => (
               <button key={cat} onClick={() => setFilter(cat)} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all border ${filter === cat ? "bg-slate-900 text-white border-slate-900 scale-105 shadow-md" : "bg-white text-slate-500 border-slate-200 hover:border-orange-500"}`}>
@@ -500,38 +590,23 @@ export default function App() {
             ))}
           </div>
 
-          {/* Mobile Version (Aparece apenas em telemóveis) */}
+          {/* Mobile Version Dropdown */}
           <div className="sm:hidden relative">
-            <button 
-              onClick={() => setIsMobileCategoryMenuOpen(!isMobileCategoryMenuOpen)} 
-              className="w-full bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between font-black text-[12px] uppercase tracking-widest shadow-sm active:scale-[0.98] transition-all"
-            >
-              <div className="flex items-center gap-3">
-                <Filter className="w-4 h-4 text-orange-500" />
-                <span>Categoria: <span className="text-orange-600">{filter}</span></span>
-              </div>
+            <button onClick={() => setIsMobileCategoryMenuOpen(!isMobileCategoryMenuOpen)} className="w-full bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between font-black text-[12px] uppercase tracking-widest shadow-sm">
+              <div className="flex items-center gap-3"><Filter className="w-4 h-4 text-orange-500" /> Categoria: <span className="text-orange-600">{filter}</span></div>
               <ChevronDown className={`w-5 h-5 transition-transform duration-300 ${isMobileCategoryMenuOpen ? 'rotate-180' : ''}`} />
             </button>
-            
             {isMobileCategoryMenuOpen && (
               <div className="absolute top-full left-0 right-0 mt-3 bg-white border border-slate-100 rounded-[1.5rem] shadow-2xl z-50 py-3 animate-in fade-in zoom-in-95 duration-200">
                 {CATEGORIES.map(cat => (
-                  <button 
-                    key={cat} 
-                    onClick={() => { setFilter(cat); setIsMobileCategoryMenuOpen(false); }} 
-                    className={`w-full text-left px-6 py-4 text-[11px] font-black uppercase tracking-widest transition-colors ${filter === cat ? 'bg-orange-50 text-orange-600 border-l-4 border-orange-500' : 'text-slate-500 hover:bg-slate-50'}`}
-                  >
-                    {cat}
-                  </button>
+                  <button key={cat} onClick={() => { setFilter(cat); setIsMobileCategoryMenuOpen(false); }} className={`w-full text-left px-6 py-4 text-[11px] font-black uppercase tracking-widest ${filter === cat ? 'bg-orange-50 text-orange-600 border-l-4 border-orange-500' : 'text-slate-500'}`}>{cat}</button>
                 ))}
               </div>
             )}
           </div>
 
           <div className="flex items-center justify-between px-4 border-t border-slate-200 pt-6">
-            <div className="flex items-center gap-2 text-slate-400 font-black text-[10px] uppercase tracking-widest">
-              {filteredProducts.length} Results
-            </div>
+            <div className="flex items-center gap-2 text-slate-400 font-black text-[10px] uppercase tracking-widest">{filteredProducts.length} Results</div>
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-transparent text-[10px] font-black uppercase tracking-widest outline-none cursor-pointer">
               <option value="newest">Newest First</option>
               <option value="price-low">Price: Low to High</option>
@@ -545,7 +620,7 @@ export default function App() {
           {filteredProducts.map(product => (
             <div key={product.id} className="group bg-white rounded-[2.5rem] border border-slate-100 p-4 hover:shadow-2xl transition-all duration-500 flex flex-col shadow-sm">
               <div className="aspect-square rounded-[2rem] overflow-hidden bg-slate-50 mb-6 relative">
-                <img src={product.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" alt={product.name} />
+                <img src={product.images ? product.images[0] : product.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" alt={product.name} />
                 <div className="absolute top-4 left-4 bg-orange-600 text-white text-[8px] font-black px-3 py-1.5 rounded-lg uppercase tracking-wider shadow-lg">
                   {siteSettings?.badgeText}
                 </div>
@@ -555,8 +630,8 @@ export default function App() {
                 <span className="text-[9px] font-black text-orange-600 uppercase tracking-widest mb-1">{product.category}</span>
                 <h3 className="font-bold text-slate-900 text-lg mb-4 uppercase tracking-tighter line-clamp-1">{product.name}</h3>
                 <div className="flex justify-between items-center mt-auto pt-5 border-t border-slate-50">
-                  <div className="flex flex-col"><span className="text-[9px] text-slate-400 font-bold uppercase leading-none">Starting at</span><span className="text-xl font-black text-slate-900">${Number(product.price).toLocaleString()}</span></div>
-                  <button onClick={() => setSelectedProduct(product)} className="bg-slate-900 text-white p-3 rounded-xl hover:bg-orange-600 transition-all"><Maximize size={18} /></button>
+                  <div className="flex flex-col"><span className="text-[9px] text-slate-400 font-bold uppercase leading-none">A partir de</span><span className="text-xl font-black text-slate-900 leading-none">${Number(product.price).toLocaleString()}</span></div>
+                  <button onClick={() => { setSelectedProduct(product); setCurrentProductImgIdx(0); }} className="bg-slate-900 text-white p-3 rounded-xl hover:bg-orange-600 transition-all shadow-lg"><Maximize size={18} /></button>
                 </div>
               </div>
             </div>
@@ -579,7 +654,7 @@ export default function App() {
       {/* LOGIN ADMIN */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl animate-in fade-in">
-          <div className="bg-white rounded-[3rem] p-10 max-w-sm w-full text-center space-y-6 shadow-2xl">
+          <div className="bg-white rounded-[3rem] p-10 max-sm:w-full max-w-sm w-full text-center space-y-6 shadow-2xl">
             <div className="w-20 h-20 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto shadow-inner"><Lock size={32} /></div>
             <h2 className="text-2xl font-black italic uppercase text-slate-900 tracking-tighter">Admin Access</h2>
             <form onSubmit={handlePasswordSubmit} className="space-y-4">
@@ -590,23 +665,62 @@ export default function App() {
         </div>
       )}
 
+      {/* DETALHES DO PRODUTO (SLIDER MODAL) */}
       {selectedProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-6 bg-slate-900/80 backdrop-blur-md overflow-y-auto">
-          <div className="bg-white rounded-none sm:rounded-[3.5rem] max-w-5xl w-full flex flex-col md:flex-row overflow-hidden shadow-2xl animate-in zoom-in duration-300">
-            <div className="md:w-1/2 h-[350px] md:h-auto relative bg-slate-100 shrink-0">
-              <img src={selectedProduct.image} className="w-full h-full object-cover" alt={selectedProduct.name} />
-              <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full md:hidden"><X size={24} /></button>
+          <div className="bg-white rounded-none sm:rounded-[3.5rem] max-w-6xl w-full flex flex-col lg:flex-row overflow-hidden shadow-2xl animate-in zoom-in duration-300">
+            
+            {/* ÁREA DO SLIDER DE IMAGENS */}
+            <div className="lg:w-3/5 h-[400px] lg:h-auto relative bg-black shrink-0 overflow-hidden group/modal">
+              <div className="w-full h-full flex transition-transform duration-700 ease-out" style={{ transform: `translateX(-${currentProductImgIdx * 100}%)` }}>
+                {(selectedProduct.images || [selectedProduct.image]).map((img, i) => (
+                  <img key={i} src={img} className="w-full h-full object-contain shrink-0" alt={`View ${i + 1}`} />
+                ))}
+              </div>
+              
+              {/* Setas de Navegação */}
+              {(selectedProduct.images?.length > 1) && (
+                <>
+                  <button onClick={prevProdImg} className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 text-white p-3 rounded-full backdrop-blur-md transition-all opacity-0 group-hover/modal:opacity-100">
+                    <ChevronLeft size={24} />
+                  </button>
+                  <button onClick={nextProdImg} className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 text-white p-3 rounded-full backdrop-blur-md transition-all opacity-0 group-hover/modal:opacity-100">
+                    <ChevronRight size={24} />
+                  </button>
+                </>
+              )}
+
+              {/* Indicadores de Slide */}
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
+                {(selectedProduct.images || [selectedProduct.image]).map((_, i) => (
+                  <button 
+                    key={i} 
+                    onClick={() => setCurrentProductImgIdx(i)}
+                    className={`h-1.5 rounded-full transition-all duration-500 ${i === currentProductImgIdx ? 'w-8 bg-white shadow-lg' : 'w-2 bg-white/40'}`} 
+                  />
+                ))}
+              </div>
+
+              <button onClick={() => setSelectedProduct(null)} className="absolute top-6 left-6 bg-black/50 text-white p-2 rounded-full lg:hidden"><X size={24} /></button>
             </div>
-            <div className="md:w-1/2 p-8 sm:p-16 flex flex-col justify-center relative bg-white text-left">
-              <button onClick={() => setSelectedProduct(null)} className="hidden md:block absolute top-8 right-8 text-slate-300 hover:text-slate-900 transition-all"><X size={32} /></button>
+
+            {/* CONTEÚDO TÉCNICO */}
+            <div className="lg:w-2/5 p-8 sm:p-14 flex flex-col justify-center relative bg-white text-left">
+              <button onClick={() => setSelectedProduct(null)} className="hidden lg:block absolute top-8 right-8 text-slate-300 hover:text-slate-900 transition-all"><X size={32} /></button>
               <span className="text-orange-600 font-black text-[10px] uppercase tracking-[0.4em] bg-orange-50 px-5 py-2.5 rounded-2xl w-fit">{selectedProduct.category}</span>
               <h2 className="text-3xl sm:text-5xl font-black text-slate-900 mt-8 mb-10 leading-tight tracking-tighter uppercase">{selectedProduct.name}</h2>
-              <div className="bg-slate-50 p-8 rounded-[2.5rem] mb-10 border border-slate-100">
+              <div className="bg-slate-50 p-8 rounded-[2.5rem] mb-10 border border-slate-100 shadow-inner overflow-y-auto max-h-[200px]">
                 <p className="text-slate-600 leading-relaxed text-lg italic">"{selectedProduct.description}"</p>
               </div>
-              <button onClick={() => window.open(`https://wa.me/${siteSettings?.whatsapp}?text=Vi o seu ${selectedProduct.name} e gostaria de um orçamento.`)} className="w-full bg-orange-600 text-white py-5 rounded-[2rem] font-black shadow-xl uppercase text-[11px] tracking-widest flex items-center justify-center gap-3">
-                Request Quote <ExternalLink size={18} />
-              </button>
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-8 pt-6 border-t border-slate-100 mt-auto">
+                <div className="text-left">
+                  <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest block mb-1">A partir de</span>
+                  <span className="text-4xl font-black text-slate-900 leading-none">${Number(selectedProduct.price).toLocaleString()}</span>
+                </div>
+                <button onClick={() => window.open(`https://wa.me/${siteSettings?.whatsapp}?text=Vi o seu ${selectedProduct.name} e gostaria de um orçamento.`)} className="w-full sm:w-auto bg-orange-600 text-white px-12 py-5 rounded-[2rem] font-black shadow-xl uppercase text-[11px] tracking-widest flex items-center justify-center gap-3">
+                  Pedir Orçamento <ExternalLink size={18} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -618,7 +732,7 @@ export default function App() {
           <div className="bg-slate-900 p-8 text-white flex justify-between items-center relative overflow-hidden">
             <div className="relative z-10 flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-orange-500 flex items-center justify-center shadow-lg"><MessageSquare size={24} /></div>
-              <div className="leading-none"><h4 className="font-black uppercase tracking-tight text-white mb-1">IA Consultor</h4><p className="text-[10px] text-orange-400 font-bold uppercase">Florida Office</p></div>
+              <div className="leading-none"><h4 className="font-black uppercase tracking-tight text-white mb-1">IA Consultor</h4><p className="text-[10px] text-orange-400 font-bold uppercase tracking-widest">Florida Office</p></div>
             </div>
             <button onClick={() => setIsAiChatOpen(false)} className="bg-white/10 p-2 rounded-xl hover:bg-white/20 transition-all"><X size={20} /></button>
           </div>
