@@ -8,12 +8,12 @@ import {
   Command, Award, Pencil, PlayCircle, Youtube, ChevronLeft, Loader2
 } from 'lucide-react';
 
-// Importações do Firebase
+// Firebase Imports
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, doc, onSnapshot, addDoc, deleteDoc, setDoc, updateDoc } from 'firebase/firestore';
 
-// --- ✅ CONFIGURAÇÃO FIREBASE ---
+// --- ✅ FIREBASE CONFIGURATION ---
 const VERCEL_FIREBASE_CONFIG = {
   apiKey: "AIzaSyCxRhZLz3H4zeEEvNkxh4U_ZjeTEGg6PPE",
   authDomain: "the-gsi-catalog.firebaseapp.com",
@@ -48,7 +48,7 @@ const VIDEO_GALLERIES = [
   "General", "Tutorials", "Project Showcases", "Customer Testimonials", "Behind the Scenes"
 ];
 
-// --- INICIALIZAÇÃO FIREBASE ---
+// --- FIREBASE INITIALIZATION ---
 let db = null;
 let auth = null;
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'the-gsi-group-final';
@@ -59,7 +59,7 @@ try {
   auth = getAuth(app);
   db = getFirestore(app);
 } catch (e) { 
-  console.error("Erro na ligação ao Firebase."); 
+  console.error("Firebase connection error."); 
 }
 
 export default function App() {
@@ -84,7 +84,7 @@ export default function App() {
   
   const searchInputRef = useRef(null);
 
-  // Estados Admin
+  // Admin States
   const [editSettings, setEditSettings] = useState(DEFAULT_SETTINGS);
   const [editingId, setEditingId] = useState(null);
   const [newProduct, setNewProduct] = useState({ 
@@ -97,7 +97,7 @@ export default function App() {
   const [aiMessages, setAiMessages] = useState([]);
   const [isMobileCategoryMenuOpen, setIsMobileCategoryMenuOpen] = useState(false);
 
-  // Atalho pesquisa (/)
+  // Keyboard shortcut (/)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
@@ -109,7 +109,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Firebase Realtime Sync
+  // Real-time Sync
   useEffect(() => {
     if (!db || !user) return;
     
@@ -145,7 +145,7 @@ export default function App() {
     return () => { unsubProducts(); unsubBanners(); unsubVideos(); unsubSettings(); };
   }, [user]);
 
-  // Ciclo Slides
+  // Slideshow cycle
   useEffect(() => {
     if (banners.length <= 1) return;
     const timer = setInterval(() => {
@@ -169,7 +169,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // --- ✅ LÓGICA DE CHAT COM REDIRECIONAMENTO CORRIGIDA ---
+  // --- ✅ CHAT REDIRECT LOGIC ---
   const openAiChat = () => {
     setAiMessages([{
       role: 'assistant',
@@ -181,15 +181,16 @@ export default function App() {
   useEffect(() => {
     if (isAiChatOpen) {
       const timer = setTimeout(() => {
-        window.open(`https://wa.me/${siteSettings.whatsapp}?text=Hi! I would like to start a project with GSI Group.`, '_blank');
+        const cleanPhone = siteSettings.whatsapp.replace(/\D/g, '');
+        window.open(`https://wa.me/${cleanPhone}?text=Hi! I would like to start a project with GSI Group.`, '_blank');
         setIsAiChatOpen(false);
-        setAiMessages([]); // Limpa para a próxima vez
+        setAiMessages([]); 
       }, 2500);
       return () => clearTimeout(timer);
     }
   }, [isAiChatOpen, siteSettings.whatsapp]);
 
-  // Handlers Admin
+  // Admin Handlers
   const handleAddVideo = async (e) => {
     e.preventDefault();
     if (!db || isSaving || !user) return;
@@ -198,16 +199,16 @@ export default function App() {
       const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
       const match = newVideo.youtubeUrl.match(regExp);
       const videoId = (match && match[2] && match[2].length === 11) ? match[2] : null;
-      if (!videoId) throw new Error("YouTube URL inválida.");
+      if (!videoId) throw new Error("Invalid YouTube URL.");
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'videos'), { ...newVideo, videoId, createdAt: new Date().toISOString() });
       setNewVideo({ title: '', youtubeUrl: '', gallery: 'General' });
-      setStatusMsg({ type: 'success', text: 'Vídeo adicionado!' });
+      setStatusMsg({ type: 'success', text: 'Video added successfully!' });
     } catch (e) { setStatusMsg({ type: 'error', text: e.message }); }
     finally { setIsSaving(false); setTimeout(() => setStatusMsg({ type: '', text: '' }), 3000); }
   };
 
   const handleDeleteVideo = async (id) => {
-    if (!db || !user || !window.confirm("Eliminar vídeo?")) return;
+    if (!db || !user || !window.confirm("Delete video?")) return;
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'videos', id));
   };
 
@@ -218,13 +219,13 @@ export default function App() {
     try {
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'banners'), { ...newBanner, createdAt: new Date().toISOString() });
       setNewBanner({ title: '', subtitle: '', image: '', active: true });
-      setStatusMsg({ type: 'success', text: 'Banner adicionado!' });
-    } catch (e) { setStatusMsg({ type: 'error', text: 'Erro ao guardar.' }); }
+      setStatusMsg({ type: 'success', text: 'Banner added successfully!' });
+    } catch (e) { setStatusMsg({ type: 'error', text: 'Error saving banner.' }); }
     finally { setIsSaving(false); setTimeout(() => setStatusMsg({ type: '', text: '' }), 3000); }
   };
 
   const handleDeleteBanner = async (id) => {
-    if (!db || id === 'default' || !user || !window.confirm("Eliminar banner?")) return;
+    if (!db || id === 'default' || !user || !window.confirm("Delete banner?")) return;
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'banners', id));
   };
 
@@ -232,7 +233,7 @@ export default function App() {
     e.preventDefault();
     if (!db || isSaving || !user) return;
     const filteredImages = newProduct.images.filter(url => url.trim() !== '');
-    if (filteredImages.length === 0) { setStatusMsg({ type: 'error', text: 'Adicione pelo menos uma imagem.' }); return; }
+    if (filteredImages.length === 0) { setStatusMsg({ type: 'error', text: 'Add at least one image.' }); return; }
     setIsSaving(true);
     try {
       const productData = { ...newProduct, images: filteredImages, image: filteredImages[0], price: Number(newProduct.price) };
@@ -245,8 +246,8 @@ export default function App() {
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), productData);
       }
       setNewProduct({ name: '', category: 'Digital marketing', price: '', description: '', images: ['', '', '', '', ''] });
-      setStatusMsg({ type: 'success', text: 'Portfólio atualizado!' });
-    } catch (err) { setStatusMsg({ type: 'error', text: 'Erro ao guardar.' }); }
+      setStatusMsg({ type: 'success', text: 'Portfolio updated!' });
+    } catch (err) { setStatusMsg({ type: 'error', text: 'Error saving work.' }); }
     finally { setIsSaving(false); setTimeout(() => setStatusMsg({ type: '', text: '' }), 3000); }
   };
 
@@ -258,7 +259,7 @@ export default function App() {
   };
 
   const handleDeleteProduct = async (id) => {
-    if (!db || !user || !window.confirm("Eliminar este trabalho?")) return;
+    if (!db || !user || !window.confirm("Delete this work?")) return;
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
   };
 
@@ -268,8 +269,8 @@ export default function App() {
     setIsSaving(true);
     try {
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), editSettings);
-      setStatusMsg({ type: 'success', text: 'Definições guardadas!' });
-    } catch (err) { setStatusMsg({ type: 'error', text: 'Erro ao guardar.' }); }
+      setStatusMsg({ type: 'success', text: 'Settings saved successfully!' });
+    } catch (err) { setStatusMsg({ type: 'error', text: 'Update failed.' }); }
     finally { setIsSaving(false); setTimeout(() => setStatusMsg({ type: '', text: '' }), 3000); }
   };
 
@@ -285,7 +286,7 @@ export default function App() {
     if (navigator.share) { navigator.share({ title: p.name, url }); }
     else {
       const el = document.createElement('textarea'); el.value = url; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
-      setStatusMsg({ type: 'success', text: 'Link copiado!' }); setTimeout(() => setStatusMsg({ type: '', text: '' }), 2000);
+      setStatusMsg({ type: 'success', text: 'Link copied!' }); setTimeout(() => setStatusMsg({ type: '', text: '' }), 2000);
     }
   };
 
@@ -316,11 +317,11 @@ export default function App() {
         </div>
         <div className="hidden md:flex flex-1 max-w-md mx-8 relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input ref={searchInputRef} type="text" placeholder="Search... (Atalho '/')" className="w-full bg-slate-100/50 border border-slate-200 py-2.5 pl-11 pr-4 rounded-2xl text-sm outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all font-medium" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          <input ref={searchInputRef} type="text" placeholder="Search... (Shortcut '/')" className="w-full bg-slate-100/50 border border-slate-200 py-2.5 pl-11 pr-4 rounded-2xl text-sm outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all font-medium" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
           <button onClick={() => isAdminMode ? setIsAdminMode(false) : setIsPasswordModalOpen(true)} className={`p-2.5 rounded-2xl transition-all ${isAdminMode ? 'bg-orange-500 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-100'}`}><LayoutDashboard className="w-5 h-5" /></button>
-          <button onClick={() => window.open(`https://wa.me/${siteSettings?.whatsapp}`, '_blank')} className="bg-slate-900 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-sm font-bold shadow-xl uppercase tracking-widest">Contact</button>
+          <button onClick={() => window.open(`https://wa.me/${siteSettings?.whatsapp.replace(/\D/g, '')}`, '_blank')} className="bg-slate-900 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-sm font-bold shadow-xl uppercase tracking-widest">Contact</button>
         </div>
       </header>
 
@@ -334,7 +335,7 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
         
-        {/* DASHBOARD ADMIN COMPLETO */}
+        {/* FULL ADMIN DASHBOARD */}
         {isAdminMode && (
           <div className="mb-12 space-y-8 animate-in slide-in-from-top-6 duration-700 text-left">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -344,40 +345,40 @@ export default function App() {
               </div>
               <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-4">
                 <div className="bg-green-50 p-3 rounded-2xl text-green-600"><TrendingUp className="w-6 h-6"/></div>
-                <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Média de Preços</p><p className="text-2xl font-black">${stats.avgPrice}</p></div>
+                <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Avg Price</p><p className="text-2xl font-black">${stats.avgPrice}</p></div>
               </div>
             </div>
 
-            {/* Vídeos Admin */}
+            {/* Video Admin */}
             <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-100">
                <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-red-600 uppercase italic tracking-tighter"><Youtube className="w-5 h-5" /> Video Gallery Control</h2>
               <form onSubmit={handleAddVideo} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <input placeholder="Título" className="p-4 bg-slate-50 rounded-2xl text-sm border border-slate-100" value={newVideo.title} onChange={e => setNewVideo({...newVideo, title: e.target.value})} required />
+                <input placeholder="Video Title" className="p-4 bg-slate-50 rounded-2xl text-sm border border-slate-100" value={newVideo.title} onChange={e => setNewVideo({...newVideo, title: e.target.value})} required />
                 <select className="p-4 bg-slate-50 rounded-2xl text-sm border border-slate-100" value={newVideo.gallery} onChange={e => setNewVideo({...newVideo, gallery: e.target.value})}>
                   {VIDEO_GALLERIES.map(gal => <option key={gal} value={gal}>{gal}</option>)}
                 </select>
-                <input placeholder="Link YouTube" className="p-4 bg-slate-50 rounded-2xl text-sm border border-slate-100" value={newVideo.youtubeUrl} onChange={e => setNewVideo({...newVideo, youtubeUrl: e.target.value})} required />
-                <button type="submit" disabled={isSaving} className="md:col-span-3 bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs">Adicionar Vídeo</button>
+                <input placeholder="YouTube Link" className="p-4 bg-slate-50 rounded-2xl text-sm border border-slate-100" value={newVideo.youtubeUrl} onChange={e => setNewVideo({...newVideo, youtubeUrl: e.target.value})} required />
+                <button type="submit" disabled={isSaving} className="md:col-span-3 bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs">Add Video</button>
               </form>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {videos.map(v => (
-                  <div key={v.id} className="relative group rounded-xl overflow-hidden aspect-video bg-slate-100">
-                    <img src={`https://img.youtube.com/vi/${v.videoId}/mqdefault.jpg`} className="w-full h-full object-cover" />
+                  <div key={v.id} className="relative group rounded-xl overflow-hidden aspect-video bg-slate-100 border border-slate-50 shadow-inner">
+                    <img src={`https://img.youtube.com/vi/${v.videoId}/mqdefault.jpg`} className="w-full h-full object-cover" alt={v.title} />
                     <button onClick={() => handleDeleteVideo(v.id)} className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14} /></button>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* --- ✅ RESTAURAÇÃO: GESTÃO DE BANNERS --- */}
+            {/* Banner Admin */}
             <div className="bg-slate-900 rounded-[2.5rem] p-6 sm:p-8 text-white shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl"></div>
-              <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-orange-500 uppercase italic tracking-tighter relative z-10"><ImageIcon className="w-5 h-5" /> Homepage Slideshow (Banners)</h2>
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-orange-500 uppercase italic tracking-tighter relative z-10"><ImageIcon className="w-5 h-5" /> Slideshow Control</h2>
               <form onSubmit={handleAddBanner} className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 relative z-10">
-                <input placeholder="Título do Slide" className="p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-white focus:border-orange-500 outline-none" value={newBanner.title} onChange={e => setNewBanner({...newBanner, title: e.target.value})} required />
-                <input placeholder="Link da Imagem (Fundo)" className="p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-white focus:border-orange-500 outline-none" value={newBanner.image} onChange={e => setNewBanner({...newBanner, image: e.target.value})} />
-                <textarea placeholder="Subtítulo do Slide" className="md:col-span-2 p-4 bg-white/5 border border-white/10 rounded-2xl text-sm h-20 text-white focus:border-orange-500 outline-none" value={newBanner.subtitle} onChange={e => setNewBanner({...newBanner, subtitle: e.target.value})} required />
-                <button type="submit" disabled={isSaving} className="md:col-span-2 bg-orange-600 p-4 rounded-2xl font-black uppercase text-xs hover:bg-orange-500 transition-all shadow-lg">Criar Novo Slide</button>
+                <input placeholder="Slide Title" className="p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-white focus:border-orange-500 outline-none" value={newBanner.title} onChange={e => setNewBanner({...newBanner, title: e.target.value})} required />
+                <input placeholder="Background Image Link (1920x550)" className="p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-white focus:border-orange-500 outline-none" value={newBanner.image} onChange={e => setNewBanner({...newBanner, image: e.target.value})} />
+                <textarea placeholder="Slide Subtitle" className="md:col-span-2 p-4 bg-white/5 border border-white/10 rounded-2xl text-sm h-20 text-white focus:border-orange-500 outline-none" value={newBanner.subtitle} onChange={e => setNewBanner({...newBanner, subtitle: e.target.value})} required />
+                <button type="submit" disabled={isSaving} className="md:col-span-2 bg-orange-600 p-4 rounded-2xl font-black uppercase text-xs hover:bg-orange-500 transition-all shadow-lg">Add New Slide</button>
               </form>
               <div className="space-y-2 relative z-10">
                 {banners.map(b => (
@@ -392,52 +393,56 @@ export default function App() {
               </div>
             </div>
 
-            {/* --- ✅ RESTAURAÇÃO: DEFINIÇÕES GLOBAIS --- */}
+            {/* --- ✅ RESTORED: GLOBAL SETTINGS FORM --- */}
             <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-100">
-               <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900 uppercase italic tracking-tighter"><Settings className="w-5 h-5" /> Site Branding & Contact</h2>
+               <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900 uppercase italic tracking-tighter"><Settings className="w-5 h-5" /> Site Branding & Footer Control</h2>
               <form onSubmit={handleSaveSettings} className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Company Name</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.companyName} onChange={e => setEditSettings({...editSettings, companyName: e.target.value})} /></div>
+                <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Tagline (Footer)</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.tagline} onChange={e => setEditSettings({...editSettings, tagline: e.target.value})} /></div>
                 <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">WhatsApp (Numbers only)</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.whatsapp} onChange={e => setEditSettings({...editSettings, whatsapp: e.target.value})} /></div>
+                <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Business Email</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.email} onChange={e => setEditSettings({...editSettings, email: e.target.value})} /></div>
                 <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Business Address</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.address} onChange={e => setEditSettings({...editSettings, address: e.target.value})} /></div>
                 <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Badge Text (Quality Stamp)</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.badgeText} onChange={e => setEditSettings({...editSettings, badgeText: e.target.value})} /></div>
-                <button type="submit" disabled={isSaving} className="md:col-span-2 bg-slate-900 text-white p-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-black transition-all shadow-xl">Guardar Definições Globais</button>
+                <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Logo URL (.png/.jpg)</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.logoUrl} onChange={e => setEditSettings({...editSettings, logoUrl: e.target.value})} /></div>
+                <div className="space-y-1"><p className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-left">Copyright Statement</p><input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={editSettings.copyright} onChange={e => setEditSettings({...editSettings, copyright: e.target.value})} /></div>
+                <button type="submit" disabled={isSaving} className="md:col-span-2 bg-slate-900 text-white p-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-black transition-all shadow-xl">Save Global Settings</button>
               </form>
             </div>
 
-            {/* Produto Admin */}
+            {/* Product Admin */}
             <div className={`bg-white border-2 rounded-[2.5rem] p-6 sm:p-8 shadow-2xl transition-all ${editingId ? 'border-blue-500' : 'border-orange-100'}`}>
-              <h2 className={`text-xl font-black italic uppercase tracking-tighter mb-8 flex items-center gap-2 ${editingId ? 'text-blue-600' : 'text-orange-600'}`}>{editingId ? <Pencil className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />} {editingId ? "Editar" : "Novo Trabalho"}</h2>
+              <h2 className={`text-xl font-black italic uppercase tracking-tighter mb-8 flex items-center gap-2 ${editingId ? 'text-blue-600' : 'text-orange-600'}`}>{editingId ? <Pencil className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />} {editingId ? "Edit Work" : "Publish New Work"}</h2>
               <form onSubmit={handleAddProduct} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  <input placeholder="Título" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
+                  <input placeholder="Title" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
                   <select className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none cursor-pointer" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
                     {CATEGORIES.filter(c => c !== "All").map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
-                  <input placeholder="Preço" type="number" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
+                  <input placeholder="Starting Price ($)" type="number" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
                 </div>
                 <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4">
                   {newProduct.images.map((url, idx) => (
-                    <input key={idx} placeholder={`Link Foto ${idx + 1}`} className="w-full p-4 bg-white border border-slate-100 rounded-2xl text-sm outline-none" value={url} onChange={e => { const ni = [...newProduct.images]; ni[idx] = e.target.value; setNewProduct({...newProduct, images: ni}); }} />
+                    <input key={idx} placeholder={`Photo Link ${idx + 1}`} className="w-full p-4 bg-white border border-slate-100 rounded-2xl text-sm outline-none" value={url} onChange={e => { const ni = [...newProduct.images]; ni[idx] = e.target.value; setNewProduct({...newProduct, images: ni}); }} />
                   ))}
                 </div>
-                <textarea placeholder="Descrição" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl h-24 text-sm outline-none" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
-                <button type="submit" className={`w-full py-4 rounded-[1.5rem] font-black uppercase text-xs text-white shadow-xl transition-all ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-900 hover:bg-black'}`}>Guardar</button>
+                <textarea placeholder="Description" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl h-24 text-sm outline-none" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} required />
+                <button type="submit" disabled={isSaving} className={`w-full py-4 rounded-[1.5rem] font-black uppercase text-xs text-white shadow-xl transition-all ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-900 hover:bg-black'}`}>Save to Portfolio</button>
               </form>
             </div>
           </div>
         )}
 
-        {/* HERO SLIDESHOW */}
+        {/* HERO SLIDESHOW (Responsive 300px mobile / 550px desktop) */}
         {!isAdminMode && (
           <div className="mb-10 relative h-[300px] sm:h-[550px] rounded-[2rem] sm:rounded-[3.5rem] overflow-hidden shadow-2xl">
             {banners.map((slide, index) => (
-              <div key={slide.id} className={`absolute inset-0 transition-all duration-1000 transform flex items-center px-6 sm:px-14 ${index === currentSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} style={{ backgroundColor: slide.image ? 'transparent' : siteSettings?.primaryColor, backgroundImage: slide.image ? `url(${slide.image})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }}>
+              <div key={slide.id} className={`absolute inset-0 transition-all duration-1000 transform flex items-center px-6 sm:px-14 ${index === currentSlide ? 'opacity-100 scale-100' : 'opacity-0 scale-105 pointer-events-none'}`} style={{ backgroundColor: slide.image ? 'transparent' : siteSettings?.primaryColor, backgroundImage: slide.image ? `url(${slide.image})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }}>
                 {slide.image && <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"></div>}
                 <div className="relative z-10 max-w-2xl text-left text-white animate-in slide-in-from-bottom-6">
                   <div className="inline-flex items-center gap-2 bg-white/20 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] mb-4 backdrop-blur-md border border-white/10">
                     <Award className="w-3 h-3"/> {siteSettings?.badgeText}
                   </div>
-                  <h2 className="text-2xl sm:text-7xl font-black mb-4 uppercase leading-[1]"> {slide.title} </h2>
+                  <h2 className="text-2xl sm:text-7xl font-black mb-4 uppercase leading-[1] tracking-tighter"> {slide.title} </h2>
                   <p className="text-white/90 mb-6 text-xs sm:text-xl font-medium max-w-md">{slide.subtitle}</p>
                   <button onClick={openAiChat} className="bg-white text-slate-900 px-6 sm:px-10 py-3 sm:py-4 rounded-full font-black uppercase text-[10px] sm:text-xs shadow-xl hover:scale-105 transition-all">Start Project</button>
                 </div>
@@ -462,14 +467,14 @@ export default function App() {
           </div>
         )}
 
-        {/* CATEGORIES MOBILE SELETOR */}
+        {/* CATEGORIES SEPARATOR */}
         <div className="flex flex-col gap-6 mb-12">
           <div className="hidden sm:flex flex-wrap justify-center gap-2">
             {CATEGORIES.map(cat => <button key={cat} onClick={() => setFilter(cat)} className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-wider border transition-all ${filter === cat ? "bg-slate-900 text-white border-slate-900 scale-105 shadow-md" : "bg-white text-slate-500 hover:border-orange-500"}`}>{cat}</button>)}
           </div>
           <div className="sm:hidden relative">
             <button onClick={() => setIsMobileCategoryMenuOpen(!isMobileCategoryMenuOpen)} className="w-full bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between font-black text-[12px] uppercase shadow-sm">
-              <div className="flex items-center gap-3"><Filter className="w-4 h-4 text-orange-500" /> Categoria: <span className="text-orange-600">{filter}</span></div>
+              <div className="flex items-center gap-3"><Filter className="w-4 h-4 text-orange-500" /> Category: <span className="text-orange-600">{filter}</span></div>
               <ChevronDown className={`w-5 h-5 transition-transform ${isMobileCategoryMenuOpen ? 'rotate-180' : ''}`} />
             </button>
             {isMobileCategoryMenuOpen && (
@@ -491,7 +496,7 @@ export default function App() {
               </div>
               <h3 className="font-bold text-slate-900 text-lg mb-4 uppercase line-clamp-1 tracking-tighter">{product.name}</h3>
               <div className="flex justify-between items-center mt-auto pt-5 border-t border-slate-50">
-                <div className="flex flex-col"><span className="text-[9px] text-slate-400 font-bold uppercase leading-none">A partir de</span><span className="text-xl font-black text-slate-900">${Number(product.price).toLocaleString()}</span></div>
+                <div className="flex flex-col"><span className="text-[9px] text-slate-400 font-bold uppercase leading-none">Starting at</span><span className="text-xl font-black text-slate-900">${Number(product.price).toLocaleString()}</span></div>
                 <button onClick={() => { setSelectedProduct(product); setCurrentProductImgIdx(0); }} className="bg-slate-900 text-white p-3 rounded-xl hover:bg-orange-600 shadow-md"><Maximize size={18} /></button>
               </div>
             </div>
@@ -499,30 +504,37 @@ export default function App() {
         </div>
       </main>
 
-      {/* FOOTER */}
-      <footer className="bg-slate-900 text-white py-12 px-4 text-center mt-20 border-t border-white/5">
-        <h2 className="text-2xl font-black uppercase mb-8 tracking-tighter italic">THE <span style={{ color: siteSettings?.primaryColor }}>GSI</span> GROUP</h2>
-        <div className="flex flex-col sm:flex-row justify-center gap-8 text-[10px] font-black uppercase text-slate-500">
+      {/* FOOTER (Fully Dynamic) */}
+      <footer className="bg-slate-900 text-white py-16 px-4 text-center mt-20 border-t border-white/5">
+        <h2 className="text-2xl font-black uppercase mb-4 tracking-tighter italic">THE <span style={{ color: siteSettings?.primaryColor }}>GSI</span> GROUP</h2>
+        <p className="text-slate-400 text-[10px] uppercase tracking-[0.4em] mb-10 italic font-medium">{siteSettings?.tagline}</p>
+        
+        <div className="flex flex-col sm:flex-row justify-center gap-8 text-[10px] font-black uppercase text-slate-500 mb-12">
           <div className="flex items-center justify-center gap-2"><MapPin size={14} className="text-orange-500 shrink-0" /> {siteSettings?.address}</div>
-          <div className="flex items-center justify-center gap-2"><Phone size={14} className="text-orange-500 shrink-0" /> +1 {siteSettings?.whatsapp}</div>
+          <div className="flex items-center justify-center gap-2"><Mail size={14} className="text-orange-500 shrink-0" /> {siteSettings?.email}</div>
+          <div className="flex items-center justify-center gap-2"><Phone size={14} className="text-orange-500 shrink-0" /> +1 ({siteSettings?.whatsapp.substring(1,4)}) {siteSettings?.whatsapp.substring(4,7)}-{siteSettings?.whatsapp.substring(7)}</div>
         </div>
+
+        <p className="text-slate-600 text-[9px] uppercase tracking-[0.3em] font-bold">
+          © {new Date().getFullYear()} {siteSettings?.copyright} • ALL RIGHTS RESERVED
+        </p>
       </footer>
 
-      {/* MODAL: LOGIN ADMIN */}
+      {/* ADMIN LOGIN MODAL */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl animate-in fade-in">
           <div className="bg-white rounded-[3rem] p-10 max-w-sm w-full text-center space-y-6 shadow-2xl">
             <div className="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center mx-auto"><Lock className="text-orange-600" size={40} /></div>
             <h2 className="text-2xl font-black uppercase tracking-tighter">Admin Access</h2>
             <form onSubmit={handlePasswordSubmit} className="space-y-4">
-              <input type="password" placeholder="••••••••" className={`w-full p-5 bg-slate-50 border-2 rounded-2xl text-center text-xl font-bold outline-none ${passwordError ? 'border-red-500 animate-shake' : 'border-slate-100'}`} value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoFocus />
+              <input type="password" placeholder="••••••••" className="w-full p-5 bg-slate-50 border-2 rounded-2xl text-center text-xl font-bold outline-none focus:border-orange-500" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoFocus />
               <button type="submit" className="w-full p-4 bg-orange-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl">Unlock Dashboard</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL: DETALHES DO PRODUTO */}
+      {/* PRODUCT DETAILS MODAL (Improved Responsiveness) */}
       {selectedProduct && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/90 backdrop-blur-md p-2 sm:p-6 overflow-y-auto">
           <div className="bg-white rounded-[2.5rem] max-w-6xl w-full flex flex-col lg:flex-row overflow-hidden shadow-2xl my-auto animate-in zoom-in duration-300 max-h-[95vh]">
@@ -554,15 +566,18 @@ export default function App() {
                 <p className="text-slate-600 text-lg italic leading-relaxed">"{selectedProduct.description}"</p>
               </div>
               <div className="flex items-center justify-between gap-6 pt-6 border-t border-slate-100 mt-auto">
-                <span className="text-4xl font-black text-slate-900">${Number(selectedProduct.price).toLocaleString()}</span>
-                <button onClick={() => window.open(`https://wa.me/${siteSettings?.whatsapp}?text=Saw ${selectedProduct.name} and want a quote.`)} className="flex-1 bg-orange-600 text-white py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl flex items-center justify-center gap-3 hover:bg-orange-700 transition-all">Request Quote <ExternalLink size={18} /></button>
+                <div className="text-left">
+                  <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest block mb-1">Starting at</span>
+                  <span className="text-4xl font-black text-slate-900">${Number(selectedProduct.price).toLocaleString()}</span>
+                </div>
+                <button onClick={() => window.open(`https://wa.me/${siteSettings?.whatsapp.replace(/\D/g, '')}?text=Saw ${selectedProduct.name} and want a quote.`)} className="flex-1 bg-orange-600 text-white py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl flex items-center justify-center gap-3 hover:bg-orange-700 transition-all">Request Quote <ExternalLink size={18} /></button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* --- ✅ MODAL DE CHAT COM REDIRECIONAMENTO --- */}
+      {/* --- ✅ CHAT REDIRECT MODAL --- */}
       <div className={`fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm transition-all transform ${isAiChatOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'}`}>
         <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-[420px] overflow-hidden text-left animate-in zoom-in-95">
           <div className="bg-slate-900 p-8 text-white flex justify-between items-center relative">
