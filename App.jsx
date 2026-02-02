@@ -44,6 +44,10 @@ const CATEGORIES = [
   "Promotional Signs", "Window Graphics", "Wall Graphics"
 ];
 
+const VIDEO_GALLERIES = [
+  "General", "Tutorials", "Project Showcases", "Customer Testimonials", "Behind the Scenes"
+];
+
 // --- INICIALIZAÇÃO FIREBASE ---
 let db = null;
 let auth = null;
@@ -86,7 +90,7 @@ export default function App() {
   const [editingId, setEditingId] = useState(null);
   const [newProduct, setNewProduct] = useState({ name: '', category: 'Digital marketing', price: '', description: '', image: '' });
   const [newBanner, setNewBanner] = useState({ title: '', subtitle: '', image: '', active: true });
-  const [newVideo, setNewVideo] = useState({ title: '', youtubeUrl: '' });
+  const [newVideo, setNewVideo] = useState({ title: '', youtubeUrl: '', gallery: 'General' });
   
   // AI Chat State
   const [aiMessages, setAiMessages] = useState([]);
@@ -195,9 +199,9 @@ export default function App() {
         videoId,
         createdAt: new Date().toISOString() 
       });
-      setNewVideo({ title: '', youtubeUrl: '' });
-      setStatusMsg({ type: 'success', text: 'Video added successfully!' });
-    } catch (e) { setStatusMsg({ type: 'error', text: 'Invalid YouTube URL.' }); }
+      setNewVideo({ title: '', youtubeUrl: '', gallery: 'General' });
+      setStatusMsg({ type: 'success', text: 'Video added successfully to ' + newVideo.gallery });
+    } catch (e) { setStatusMsg({ type: 'error', text: 'Invalid YouTube URL or Error saving.' }); }
     finally { setIsSaving(false); setTimeout(() => setStatusMsg({ type: '', text: '' }), 3000); }
   };
 
@@ -356,20 +360,40 @@ export default function App() {
         {isAdminMode && (
           <div className="mb-12 space-y-8 animate-in slide-in-from-top-6 duration-700 text-left">
             
-            {/* Secção de Vídeos */}
+            {/* Secção de Vídeos (CORRIGIDA) */}
             <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-100">
                <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-red-600 uppercase italic tracking-tighter">
                 <Youtube className="w-5 h-5" /> Video Gallery Control
               </h2>
-              <form onSubmit={handleAddVideo} className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <input placeholder="Video Title" className="p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100" value={newVideo.title} onChange={e => setNewVideo({...newVideo, title: e.target.value})} required />
-                <input placeholder="YouTube URL" className="p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100" value={newVideo.youtubeUrl} onChange={e => setNewVideo({...newVideo, youtubeUrl: e.target.value})} required />
-                <button type="submit" className="md:col-span-2 bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-700">Add Video to Gallery</button>
+              <form onSubmit={handleAddVideo} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <input 
+                  placeholder="Video Title" 
+                  className="p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100" 
+                  value={newVideo.title} 
+                  onChange={e => setNewVideo({...newVideo, title: e.target.value})} 
+                  required 
+                />
+                <select 
+                  className="p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100 cursor-pointer" 
+                  value={newVideo.gallery} 
+                  onChange={e => setNewVideo({...newVideo, gallery: e.target.value})}
+                >
+                  {VIDEO_GALLERIES.map(gal => <option key={gal} value={gal}>{gal}</option>)}
+                </select>
+                <input 
+                  placeholder="YouTube URL" 
+                  className="p-4 bg-slate-50 rounded-2xl text-sm outline-none border border-slate-100" 
+                  value={newVideo.youtubeUrl} 
+                  onChange={e => setNewVideo({...newVideo, youtubeUrl: e.target.value})} 
+                  required 
+                />
+                <button type="submit" className="md:col-span-3 bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-700 transition-colors">Add Video to Selected Gallery</button>
               </form>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {videos.map(v => (
-                  <div key={v.id} className="relative group rounded-xl overflow-hidden aspect-video bg-slate-100 shadow-inner">
-                    <img src={`https://img.youtube.com/vi/${v.videoId}/mqdefault.jpg`} className="w-full h-full object-cover" />
+                  <div key={v.id} className="relative group rounded-xl overflow-hidden aspect-video bg-slate-100 shadow-inner border border-slate-50">
+                    <img src={`https://img.youtube.com/vi/${v.videoId}/mqdefault.jpg`} className="w-full h-full object-cover" alt={v.title} />
+                    <div className="absolute top-2 left-2 bg-black/60 text-white text-[8px] px-2 py-1 rounded font-bold uppercase">{v.gallery || 'General'}</div>
                     <button onClick={() => handleDeleteVideo(v.id)} className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14} /></button>
                   </div>
                 ))}
@@ -519,21 +543,24 @@ export default function App() {
           </div>
         )}
 
-        {/* VIDEOS SECTION */}
+        {/* VIDEOS SECTION (Ajustada para exibir Galeria) */}
         {!isAdminMode && videos.length > 0 && filter === "All" && (
           <div className="mb-16 text-left">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
-                <PlayCircle className="text-red-600" /> Featured Content
+                <PlayCircle className="text-red-600" /> Video Portfólio
               </h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {videos.map(v => (
-                <div key={v.id} className="bg-white rounded-[2rem] p-4 shadow-sm border border-slate-100 hover:shadow-xl transition-all">
-                  <div className="aspect-video rounded-2xl overflow-hidden mb-4 bg-slate-900 group relative">
+                <div key={v.id} className="bg-white rounded-[2rem] p-4 shadow-sm border border-slate-100 hover:shadow-xl transition-all flex flex-col">
+                  <div className="aspect-video rounded-2xl overflow-hidden mb-4 bg-slate-900 group relative shadow-inner">
                     <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${v.videoId}`} title={v.title} frameBorder="0" allowFullScreen></iframe>
                   </div>
-                  <h3 className="font-bold text-slate-800 uppercase tracking-tighter px-2 truncate">{v.title}</h3>
+                  <div className="px-2">
+                    <span className="text-[8px] font-black text-red-600 uppercase tracking-widest mb-1 block">{v.gallery || 'General'}</span>
+                    <h3 className="font-bold text-slate-800 uppercase tracking-tighter truncate">{v.title}</h3>
+                  </div>
                 </div>
               ))}
             </div>
@@ -607,7 +634,7 @@ export default function App() {
       {/* MODALS */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl animate-in fade-in">
-          <div className="bg-white rounded-[3rem] p-10 max-w-sm w-full text-center space-y-6 shadow-2xl">
+          <div className="bg-white rounded-[3rem] p-10 max-sm:w-full max-w-sm w-full text-center space-y-6 shadow-2xl">
             <div className="w-20 h-20 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto shadow-inner"><Lock size={32} /></div>
             <h2 className="text-2xl font-black italic uppercase text-slate-900 tracking-tighter">Admin Access</h2>
             <form onSubmit={handlePasswordSubmit} className="space-y-4">
